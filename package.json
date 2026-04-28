@@ -1,0 +1,30 @@
+{
+  "name": "simsekoglu-grup",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "dev:next": "next dev",
+    "dev:direct": "node scripts/dev-direct.js",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "media:construction": "node scripts/generate-construction-media-manifest.mjs"
+  },
+  "dependencies": {
+    "next": "15.2.3",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.10",
+    "@types/react": "19.0.12",
+    "@types/react-dom": "19.0.4",
+    "autoprefixer": "10.4.20",
+    "eslint": "9.22.0",
+    "eslint-config-next": "15.2.3",
+    "postcss": "8.5.3",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.8.2"
+  }
+}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Vehicle placeholder">
+  <rect width="1200" height="800" fill="#0b1f3a"/>
+  <rect x="120" y="300" width="900" height="230" rx="42" fill="#d8dee8" opacity="0.2"/>
+  <circle cx="340" cy="560" r="72" fill="#071427"/>
+  <circle cx="810" cy="560" r="72" fill="#071427"/>
+  <text x="130" y="180" fill="#d8b16a" font-family="Segoe UI, sans-serif" font-size="30" letter-spacing="8">FLEET</text>
+  <text x="130" y="240" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="52" font-weight="600">Vehicle Placeholder</text>
+  <text x="130" y="285" fill="#d8dee8" font-family="Segoe UI, sans-serif" font-size="22">Replace with approved vehicle photo.</text>
+</svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Architecture placeholder">
+  <defs>
+    <linearGradient id="archBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#071427"/>
+      <stop offset="100%" stop-color="#0b1f3a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#archBg)"/>
+  <rect x="140" y="190" width="180" height="360" fill="#d8dee8" opacity="0.18"/>
+  <rect x="370" y="140" width="230" height="410" fill="#d8dee8" opacity="0.18"/>
+  <rect x="640" y="220" width="180" height="330" fill="#d8dee8" opacity="0.18"/>
+  <rect x="860" y="110" width="200" height="440" fill="#d8dee8" opacity="0.18"/>
+  <text x="150" y="620" fill="#d8b16a" font-family="Segoe UI, sans-serif" font-size="28" letter-spacing="8">ARCHITECTURE</text>
+  <text x="150" y="680" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="50" font-weight="600">Visual Placeholder</text>
+  <text x="150" y="725" fill="#d8dee8" font-family="Segoe UI, sans-serif" font-size="22">Replace with approved architecture visuals.</text>
+</svg>

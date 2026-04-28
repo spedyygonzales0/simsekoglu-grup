@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Construction placeholder">
+  <defs>
+    <linearGradient id="consBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1f3a"/>
+      <stop offset="100%" stop-color="#112a4e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#consBg)"/>
+  <path d="M120 610 L300 420 L460 540 L700 330 L980 580 L1080 520 L1080 710 L120 710 Z" fill="#d8dee8" opacity="0.18"/>
+  <rect x="110" y="120" width="980" height="520" rx="20" fill="#ffffff" opacity="0.05"/>
+  <text x="150" y="360" fill="#d8b16a" font-family="Segoe UI, sans-serif" font-size="28" letter-spacing="8">CONSTRUCTION</text>
+  <text x="150" y="420" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="52" font-weight="600">Project Placeholder</text>
+  <text x="150" y="468" fill="#d8dee8" font-family="Segoe UI, sans-serif" font-size="22">Add final construction imagery here.</text>
+</svg>
