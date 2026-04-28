@@ -16,6 +16,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { isHydrated } = useSiteData();
   const isAdminRoute = pathname.startsWith("/admin");
+  const isHomeRoute = pathname === "/";
 
   if (isAdminRoute) {
     return <>{children}</>;
@@ -35,7 +36,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
       <main key={pathname} className="page-transition">
         {children}
       </main>
-      <Footer />
+      {!isHomeRoute ? <Footer /> : null}
       <FloatingWhatsAppButton />
       <QuoteRequestModal />
     </div>

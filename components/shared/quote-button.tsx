@@ -3,7 +3,14 @@
 import { useMemo } from "react";
 import { useSiteData } from "@/components/providers/site-data-provider";
 import { buildQuoteMessage, buildWhatsAppUrl } from "@/lib/data/whatsapp";
-import { ServiceType, Vehicle, VehicleVariant } from "@/lib/types";
+import { FuelType, ServiceType, TransmissionType, Vehicle } from "@/lib/types";
+
+interface SelectedRentalOption {
+  fuelType: FuelType;
+  transmission: TransmissionType;
+  monthlyKm: number;
+  monthlyPrice: number;
+}
 
 interface QuoteButtonProps {
   className?: string;
@@ -12,7 +19,8 @@ interface QuoteButtonProps {
   selectedProjectId?: string;
   rentalStartDate?: string;
   vehicle?: Vehicle;
-  variant?: VehicleVariant;
+  variant?: SelectedRentalOption;
+  showFormButton?: boolean;
 }
 
 export function QuoteButton({
@@ -22,7 +30,8 @@ export function QuoteButton({
   selectedProjectId,
   rentalStartDate,
   vehicle,
-  variant
+  variant,
+  showFormButton = true
 }: QuoteButtonProps) {
   const { locale, content, openQuoteModal } = useSiteData();
 
@@ -36,16 +45,15 @@ export function QuoteButton({
         ? {
             brand: vehicle.brand,
             model: vehicle.model,
+            modelYearLabel: vehicle.modelYearLabel,
             primaryCategory: vehicle.primaryCategory,
             secondaryCategories: vehicle.secondaryCategories
           }
         : undefined,
       variant: variant
         ? {
-            title: variant.title,
             fuelType: variant.fuelType,
             transmission: variant.transmission,
-            modelYear: variant.modelYear,
             monthlyKm: variant.monthlyKm,
             monthlyPrice: variant.monthlyPrice
           }
@@ -61,33 +69,35 @@ export function QuoteButton({
         href={whatsappHref}
         target="_blank"
         rel="noreferrer"
-        className={`premium-btn inline-flex items-center justify-center rounded-full bg-gold-500 px-6 py-3 text-sm font-bold tracking-wide text-navy-900 hover:bg-gold-400 ${className}`}
+        className={`premium-btn inline-flex items-center justify-center rounded-full bg-gold-500 px-6 py-3 text-base font-bold tracking-[0.02em] text-navy-900 hover:bg-gold-400 ${className}`}
       >
         {serviceType === "fleet"
-          ? locale === "tr"
-            ? "WhatsApp'tan Teklif Al"
-            : "Get Quote on WhatsApp"
+          ? "OPSİYONLA"
           : locale === "tr"
             ? content.home.ctaTr
             : content.home.ctaEn}
       </a>
-      <button
-        type="button"
-        onClick={() =>
-          openQuoteModal({
-            serviceType,
-            selectedProjectId,
-            selectedProjectLabel: serviceType !== "fleet" ? selectedLabel : undefined,
-            selectedVehicleSlug: vehicle?.slug,
-            selectedVehicleLabel: vehicle ? `${vehicle.brand} ${vehicle.model}` : undefined,
-            selectedVariantId: variant?.variantId,
-            selectedVariantLabel: variant?.title
-          })
-        }
-        className="premium-btn inline-flex items-center justify-center rounded-full border border-navy-900/20 px-5 py-3 text-sm font-semibold text-navy-900 hover:border-gold-500 hover:text-gold-500"
-      >
-        {locale === "tr" ? "Form" : "Form"}
-      </button>
+      {showFormButton ? (
+        <button
+          type="button"
+          onClick={() =>
+            openQuoteModal({
+              serviceType,
+              selectedProjectId,
+              selectedProjectLabel: serviceType !== "fleet" ? selectedLabel : undefined,
+              selectedVehicleSlug: vehicle?.slug,
+              selectedVehicleLabel: vehicle ? `${vehicle.brand} ${vehicle.model}` : undefined,
+              selectedVariantId: undefined,
+              selectedVariantLabel: variant
+                ? `${variant.fuelType} / ${variant.transmission} / ${variant.monthlyKm} KM`
+                : undefined
+            })
+          }
+          className="premium-btn inline-flex items-center justify-center rounded-full border border-navy-900/20 px-5 py-3 text-base font-semibold text-navy-900 hover:border-gold-500 hover:text-gold-500"
+        >
+          {locale === "tr" ? "Form" : "Form"}
+        </button>
+      ) : null}
     </div>
   );
 }

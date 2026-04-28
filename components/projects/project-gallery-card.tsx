@@ -48,12 +48,12 @@ export function ProjectGalleryCard({
         />
 
         <div className="space-y-3 p-5">
-          <span className="inline-flex rounded-full border border-navy-900/15 bg-cloud-50 px-3 py-1 text-xs font-semibold text-navy-900/80">
+          <span className="inline-flex rounded-full border border-navy-900/15 bg-cloud-50 px-3 py-1 text-sm font-semibold text-navy-900/80">
             {categoryLabel}
           </span>
-          <h3 className="font-display text-xl text-navy-900">{title}</h3>
-          <p className="line-clamp-2 text-sm text-navy-900/70">{shortInfo}</p>
-          <p className="text-xs uppercase tracking-[0.14em] text-navy-900/55">
+          <h3 className="card-title text-[1.55rem]">{title}</h3>
+          <p className="body-text line-clamp-2 text-navy-900/70">{shortInfo}</p>
+          <p className="text-sm font-medium tracking-[0.04em] text-navy-900/60">
             {[location, statusLabel].filter(Boolean).join(" | ") || "-"}
           </p>
 
@@ -61,7 +61,7 @@ export function ProjectGalleryCard({
             {detailHref ? (
               <Link
                 href={detailHref}
-                className="premium-btn rounded-full border border-navy-900/25 px-4 py-2 text-xs font-semibold text-navy-900 hover:border-gold-500 hover:text-gold-500"
+                className="premium-btn rounded-full border border-navy-900/25 px-4 py-2.5 text-base font-semibold text-navy-900 hover:border-gold-500 hover:text-gold-500"
               >
                 {detailLabel}
               </Link>
@@ -70,7 +70,7 @@ export function ProjectGalleryCard({
               <button
                 type="button"
                 onClick={() => onOpen(0)}
-                className="premium-btn rounded-full border border-navy-900/20 px-4 py-2 text-xs font-semibold text-navy-900/80 hover:border-gold-500 hover:text-gold-500"
+                className="premium-btn rounded-full border border-navy-900/20 px-4 py-2.5 text-base font-semibold text-navy-900/80 hover:border-gold-500 hover:text-gold-500"
               >
                 Galeriyi Aç
               </button>

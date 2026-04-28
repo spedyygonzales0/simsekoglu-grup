@@ -11,6 +11,7 @@ import { t } from "@/lib/i18n";
 export function Header() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
   const { locale } = useSiteData();
 
   const menu = useMemo(
@@ -33,17 +34,24 @@ export function Header() {
           <Link href="/" className="flex items-center gap-3">
             <div className="relative h-11 w-11 overflow-hidden rounded-lg border border-gold-500/50 bg-white/10">
               {/* Replace with official company logo when ready */}
-              <Image
-                src="/images/general/logo.png"
-                alt="Şimşekoğlu Grup Logo"
-                fill
-                sizes="44px"
-                className="object-contain p-1"
-              />
+              {logoFailed ? (
+                <span className="flex h-full w-full items-center justify-center text-sm font-bold text-white">
+                  ŞG
+                </span>
+              ) : (
+                <Image
+                  src="/images/general/logo.png"
+                  alt="Şimşekoğlu Grup Logo"
+                  fill
+                  sizes="44px"
+                  className="object-contain p-1"
+                  onError={() => setLogoFailed(true)}
+                />
+              )}
             </div>
             <div>
-              <p className="font-display text-lg font-semibold text-white">Şimşekoğlu Grup</p>
-              <p className="text-xs uppercase tracking-[0.16em] text-white/60">Corporate Group</p>
+              <p className="font-display text-xl font-semibold text-white">Şimşekoğlu Grup</p>
+              <p className="text-sm font-medium tracking-[0.04em] text-white/70">Corporate Group</p>
             </div>
           </Link>
 
@@ -54,7 +62,7 @@ export function Header() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`text-sm font-medium transition ${
+                  className={`text-base font-semibold transition ${
                     isActive ? "text-gold-400" : "text-white/85 hover:text-gold-300"
                   }`}
                 >
@@ -67,7 +75,7 @@ export function Header() {
 
           <button
             type="button"
-            className="rounded-md border border-white/30 px-3 py-2 text-sm text-white lg:hidden"
+            className="rounded-md border border-white/30 px-3 py-2 text-base text-white lg:hidden"
             onClick={() => setIsOpen((prev) => !prev)}
           >
             Menu
@@ -81,7 +89,7 @@ export function Header() {
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsOpen(false)}
-                className="block rounded-md px-3 py-2 text-white/85 transition hover:bg-white/10"
+                className="block rounded-md px-3 py-2.5 text-base text-white/90 transition hover:bg-white/10"
               >
                 {item.label}
               </Link>

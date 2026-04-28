@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { VehicleCard } from "@/components/fleet/vehicle-card";
@@ -7,7 +7,7 @@ import { CtaBanner } from "@/components/shared/cta-banner";
 import { PageHero } from "@/components/shared/page-hero";
 import { SectionTitle } from "@/components/shared/section-title";
 import { t, vehicleCategoryLabel } from "@/lib/i18n";
-import { FuelType, TransmissionType, VariantAvailabilityStatus, Vehicle, VehicleCategory } from "@/lib/types";
+import { FuelType, RentalKm, TransmissionType, Vehicle, VehicleCategory } from "@/lib/types";
 
 const CATEGORY_OPTIONS: VehicleCategory[] = [
   "suv",
@@ -21,6 +21,7 @@ const CATEGORY_OPTIONS: VehicleCategory[] = [
 ];
 
 type FleetCategoryFilter = "all" | VehicleCategory;
+type FleetSortOption = "default" | "price-asc" | "price-desc";
 
 const CATEGORY_CHIPS: Array<{
   id: FleetCategoryFilter;
@@ -39,16 +40,43 @@ const CATEGORY_CHIPS: Array<{
   { id: "van", icon: "V", labelTr: "Van", labelEn: "Van" }
 ];
 
+function normalizeFuelForFilter(fuel: FuelType): Exclude<FuelType, "Elektrik"> {
+  return fuel === "Elektrik" ? "Elektrikli" : fuel;
+}
+
 function vehicleMatchesCategory(vehicle: Vehicle, category: FleetCategoryFilter): boolean {
   if (category === "all") return true;
+  const hasElectricPackage = (vehicle.rentalPackages || []).some(
+    (pkg) => normalizeFuelForFilter(pkg.fuelType) === "Elektrikli"
+  );
   if (category === "electric") {
     return (
       vehicle.primaryCategory === "electric" ||
       vehicle.secondaryCategories.includes("electric") ||
-      vehicle.variants.some((variant) => variant.fuelType === "Elektrik")
+      hasElectricPackage
     );
   }
   return vehicle.primaryCategory === category || vehicle.secondaryCategories.includes(category);
+}
+
+function getVehicleMinPrice(vehicle: Vehicle): number {
+  const prices = (vehicle.rentalPackages || [])
+    .flatMap((pkg) => [pkg.prices[1000], pkg.prices[2000], pkg.prices[3000]])
+    .filter((price): price is number => typeof price === "number" && Number.isFinite(price) && price > 0);
+
+  if (!prices.length) return Number.MAX_SAFE_INTEGER;
+  return Math.min(...prices);
+}
+
+function sortVehicles(vehicles: Vehicle[], sortOption: FleetSortOption): Vehicle[] {
+  if (sortOption === "default") return vehicles;
+  const priced = vehicles.filter((vehicle) => getVehicleMinPrice(vehicle) !== Number.MAX_SAFE_INTEGER);
+  const noPrice = vehicles.filter((vehicle) => getVehicleMinPrice(vehicle) === Number.MAX_SAFE_INTEGER);
+  const sorted = [...priced].sort((a, b) => {
+    const diff = getVehicleMinPrice(a) - getVehicleMinPrice(b);
+    return sortOption === "price-asc" ? diff : -diff;
+  });
+  return [...sorted, ...noPrice];
 }
 
 export default function FleetRentalPage() {
@@ -58,20 +86,21 @@ export default function FleetRentalPage() {
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<FleetCategoryFilter>("all");
-  const [fuelFilter, setFuelFilter] = useState<"all" | FuelType>("all");
+  const [fuelFilter, setFuelFilter] = useState<"all" | Exclude<FuelType, "Elektrik">>("all");
   const [transmissionFilter, setTransmissionFilter] = useState<"all" | TransmissionType>("all");
-  const [availabilityFilter, setAvailabilityFilter] = useState<"all" | VariantAvailabilityStatus>("all");
   const [priceMinInput, setPriceMinInput] = useState("");
   const [priceMaxInput, setPriceMaxInput] = useState("");
+  const [sortOption, setSortOption] = useState<FleetSortOption>("default");
   const [forceResultsView, setForceResultsView] = useState(false);
 
   useEffect(() => {
-    if (categoryFilter === "electric" && fuelFilter !== "Elektrik") {
-      setFuelFilter("Elektrik");
+    if (categoryFilter === "electric" && fuelFilter !== "Elektrikli") {
+      setFuelFilter("Elektrikli");
     }
   }, [categoryFilter, fuelFilter]);
 
-  const effectiveFuelFilter: "all" | FuelType = categoryFilter === "electric" ? "Elektrik" : fuelFilter;
+  const effectiveFuelFilter: "all" | Exclude<FuelType, "Elektrik"> =
+    categoryFilter === "electric" ? "Elektrikli" : fuelFilter;
 
   const parsedMinPrice = useMemo(() => {
     const value = priceMinInput.trim();
@@ -88,53 +117,73 @@ export default function FleetRentalPage() {
   }, [priceMaxInput]);
 
   const fuelOptions = useMemo(() => {
-    const values = new Set<FuelType>();
-    activeVehicles.forEach((vehicle) => vehicle.variants.forEach((variant) => values.add(variant.fuelType)));
+    const values = new Set<Exclude<FuelType, "Elektrik">>();
+    activeVehicles.forEach((vehicle) =>
+      (vehicle.rentalPackages || []).forEach((pkg) => values.add(normalizeFuelForFilter(pkg.fuelType)))
+    );
     return Array.from(values);
   }, [activeVehicles]);
 
   const transmissionOptions = useMemo(() => {
     const values = new Set<TransmissionType>();
-    activeVehicles.forEach((vehicle) => values.add(vehicle.variants[0]?.transmission || "Otomatik"));
-    activeVehicles.forEach((vehicle) => vehicle.variants.forEach((variant) => values.add(variant.transmission)));
+    activeVehicles.forEach((vehicle) => (vehicle.rentalPackages || []).forEach((pkg) => values.add(pkg.transmission)));
     return Array.from(values);
   }, [activeVehicles]);
 
-  const visibleFuelOptions = categoryFilter === "electric" ? (["Elektrik"] as FuelType[]) : fuelOptions;
+  const visibleFuelOptions = categoryFilter === "electric" ? (["Elektrikli"] as Exclude<FuelType, "Elektrik">[]) : fuelOptions;
 
   const filteredVehicles = useMemo<Vehicle[]>(() => {
-    return activeVehicles
+    const hasVariantSpecificFilter =
+      effectiveFuelFilter !== "all" ||
+      transmissionFilter !== "all" ||
+      typeof parsedMinPrice === "number" ||
+      typeof parsedMaxPrice === "number";
+
+    const filtered = activeVehicles
       .map((vehicle) => {
         const inCategory = vehicleMatchesCategory(vehicle, categoryFilter);
-
         const searchText = `${vehicle.brand} ${vehicle.model}`.toLowerCase();
         const inSearch = search.trim() ? searchText.includes(search.trim().toLowerCase()) : true;
 
-        const filteredVariants = vehicle.variants.filter((variant) => {
-          if (effectiveFuelFilter !== "all" && variant.fuelType !== effectiveFuelFilter) return false;
-          if (transmissionFilter !== "all" && variant.transmission !== transmissionFilter) return false;
-          if (availabilityFilter !== "all" && variant.availabilityStatus !== availabilityFilter) return false;
-          if (typeof parsedMinPrice === "number" && variant.monthlyPrice < parsedMinPrice) return false;
-          if (typeof parsedMaxPrice === "number" && variant.monthlyPrice > parsedMaxPrice) return false;
+        if (!inCategory || !inSearch) return null;
+
+        const packages = vehicle.rentalPackages || [];
+        if (!packages.length) {
+          return hasVariantSpecificFilter ? null : vehicle;
+        }
+
+        const filteredPackages = packages.filter((pkg) => {
+          const fuel = normalizeFuelForFilter(pkg.fuelType);
+          if (effectiveFuelFilter !== "all" && fuel !== effectiveFuelFilter) return false;
+          if (transmissionFilter !== "all" && pkg.transmission !== transmissionFilter) return false;
+
+          const prices = ([1000, 2000, 3000] as RentalKm[])
+            .map((km) => pkg.prices[km])
+            .filter((price): price is number => typeof price === "number" && Number.isFinite(price) && price > 0);
+          if (!prices.length) return false;
+          if (typeof parsedMinPrice === "number" && prices.every((price) => price < parsedMinPrice)) return false;
+          if (typeof parsedMaxPrice === "number" && prices.every((price) => price > parsedMaxPrice)) return false;
           return true;
         });
 
-        if (!inCategory || !inSearch || filteredVariants.length === 0) return null;
+        if (!filteredPackages.length) return null;
 
         return {
           ...vehicle,
-          variants: filteredVariants
-        } as Vehicle;
+          rentalPackages: filteredPackages
+        };
       })
       .filter((vehicle): vehicle is Vehicle => Boolean(vehicle));
+
+    return sortVehicles(filtered, sortOption);
   }, [
     activeVehicles,
-    availabilityFilter,
     categoryFilter,
     effectiveFuelFilter,
     parsedMaxPrice,
     parsedMinPrice,
     search,
+    sortOption,
     transmissionFilter
   ]);
 
@@ -163,7 +212,6 @@ export default function FleetRentalPage() {
     search.trim().length > 0 ||
     fuelFilter !== "all" ||
     transmissionFilter !== "all" ||
-    availabilityFilter !== "all" ||
     priceMinInput.trim().length > 0 ||
     priceMaxInput.trim().length > 0;
 
@@ -175,39 +223,48 @@ export default function FleetRentalPage() {
         id: "featured",
         titleTr: "Öne Çıkan Araçlar",
         titleEn: "Featured Vehicles",
-        vehicles: activeVehicles.filter((vehicle) => vehicle.featured).slice(0, 6),
+        vehicles: sortVehicles(activeVehicles.filter((vehicle) => vehicle.featured), sortOption).slice(0, 6),
         category: "all" as FleetCategoryFilter
       },
       {
         id: "electric",
         titleTr: "Elektrikli Araçlar",
         titleEn: "Electric Vehicles",
-        vehicles: activeVehicles.filter((vehicle) => vehicleMatchesCategory(vehicle, "electric")).slice(0, 6),
+        vehicles: sortVehicles(
+          activeVehicles.filter((vehicle) => vehicleMatchesCategory(vehicle, "electric")),
+          sortOption
+        ).slice(0, 6),
         category: "electric" as FleetCategoryFilter
       },
       {
         id: "luxury",
         titleTr: "Lüks Araçlar",
         titleEn: "Luxury Vehicles",
-        vehicles: activeVehicles.filter((vehicle) => vehicleMatchesCategory(vehicle, "luxury")).slice(0, 6),
+        vehicles: sortVehicles(
+          activeVehicles.filter((vehicle) => vehicleMatchesCategory(vehicle, "luxury")),
+          sortOption
+        ).slice(0, 6),
         category: "luxury" as FleetCategoryFilter
       },
       {
         id: "economy",
         titleTr: "Ekonomik Araçlar",
         titleEn: "Economy Vehicles",
-        vehicles: activeVehicles.filter((vehicle) => vehicleMatchesCategory(vehicle, "economy")).slice(0, 6),
+        vehicles: sortVehicles(
+          activeVehicles.filter((vehicle) => vehicleMatchesCategory(vehicle, "economy")),
+          sortOption
+        ).slice(0, 6),
         category: "economy" as FleetCategoryFilter
       },
       {
         id: "suv",
         titleTr: "SUV Araçlar",
         titleEn: "SUV Vehicles",
-        vehicles: activeVehicles.filter((vehicle) => vehicleMatchesCategory(vehicle, "suv")).slice(0, 6),
+        vehicles: sortVehicles(activeVehicles.filter((vehicle) => vehicleMatchesCategory(vehicle, "suv")), sortOption).slice(0, 6),
         category: "suv" as FleetCategoryFilter
       }
     ],
-    [activeVehicles]
+    [activeVehicles, sortOption]
   );
 
   const activeCategoryTitle =
@@ -222,16 +279,16 @@ export default function FleetRentalPage() {
     setCategoryFilter("all");
     setFuelFilter("all");
     setTransmissionFilter("all");
-    setAvailabilityFilter("all");
     setPriceMinInput("");
     setPriceMaxInput("");
+    setSortOption("default");
     setForceResultsView(false);
   };
 
   const applyCategory = (next: FleetCategoryFilter, showResults = true) => {
     setCategoryFilter(next);
     if (next === "electric") {
-      setFuelFilter("Elektrik");
+      setFuelFilter("Elektrikli");
     }
     setForceResultsView(showResults);
   };
@@ -258,8 +315,8 @@ export default function FleetRentalPage() {
             title={t(locale, "vehicleList")}
             description={
               locale === "tr"
-                ? "Kategoriye göre keşfedin, gerçek araç seçeneklerine göre filtreleyin."
-                : "Browse by category and filter using real vehicle variant data."
+                ? "Kategoriye göre keşfedin, gerçek araç paketlerine göre filtreleyin."
+                : "Browse by category and filter using real rental package data."
             }
           />
 
@@ -332,7 +389,7 @@ export default function FleetRentalPage() {
               <select
                 value={effectiveFuelFilter}
                 onChange={(event) => {
-                  setFuelFilter(event.target.value as "all" | FuelType);
+                  setFuelFilter(event.target.value as "all" | Exclude<FuelType, "Elektrik">);
                   setForceResultsView(true);
                 }}
                 disabled={categoryFilter === "electric"}
@@ -348,7 +405,7 @@ export default function FleetRentalPage() {
               {categoryFilter === "electric" ? (
                 <p className="text-xs text-gold-700">
                   {locale === "tr"
-                    ? "Elektrikli kategori seçildiği için yakıt tipi otomatik olarak Elektrik."
+                    ? "Elektrikli kategori seçildiği için yakıt tipi otomatik olarak Elektrikli."
                     : "Fuel is automatically set to Electric for the electric category."}
                 </p>
               ) : null}
@@ -370,23 +427,6 @@ export default function FleetRentalPage() {
                     {transmission}
                   </option>
                 ))}
-              </select>
-            </label>
-
-            <label className="space-y-1 text-sm">
-              <span className="font-semibold text-navy-900">{locale === "tr" ? "Müsaitlik" : "Availability"}</span>
-              <select
-                value={availabilityFilter}
-                onChange={(event) => {
-                  setAvailabilityFilter(event.target.value as "all" | VariantAvailabilityStatus);
-                  setForceResultsView(true);
-                }}
-                className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-              >
-                <option value="all">{t(locale, "all")}</option>
-                <option value="available">{locale === "tr" ? "Müsait" : "Available"}</option>
-                <option value="limited">{locale === "tr" ? "Sınırlı" : "Limited"}</option>
-                <option value="unavailable">{locale === "tr" ? "Müsait Değil" : "Unavailable"}</option>
               </select>
             </label>
 
@@ -418,6 +458,26 @@ export default function FleetRentalPage() {
               </div>
             </div>
 
+            <label className="space-y-1 text-sm">
+              <span className="font-semibold text-navy-900">{locale === "tr" ? "Sıralama" : "Sorting"}</span>
+              <select
+                value={sortOption}
+                onChange={(event) => {
+                  setSortOption(event.target.value as FleetSortOption);
+                  setForceResultsView(true);
+                }}
+                className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+              >
+                <option value="default">{locale === "tr" ? "Varsayılan" : "Default"}</option>
+                <option value="price-asc">
+                  {locale === "tr" ? "Fiyat: Düşükten Yükseğe" : "Price: Low to High"}
+                </option>
+                <option value="price-desc">
+                  {locale === "tr" ? "Fiyat: Yüksekten Düşüğe" : "Price: High to Low"}
+                </option>
+              </select>
+            </label>
+
             <div className="flex items-end">
               <button
                 type="button"
@@ -440,7 +500,7 @@ export default function FleetRentalPage() {
                 </p>
               </div>
               {filteredVehicles.length ? (
-                <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                <div className="space-y-4">
                   {filteredVehicles.map((vehicle) => (
                     <VehicleCard key={vehicle.id} vehicle={vehicle} />
                   ))}
@@ -483,7 +543,7 @@ export default function FleetRentalPage() {
                   </div>
 
                   {section.vehicles.length ? (
-                    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="space-y-4">
                       {section.vehicles.map((vehicle) => (
                         <VehicleCard key={`${section.id}-${vehicle.id}`} vehicle={vehicle} />
                       ))}
@@ -497,6 +557,10 @@ export default function FleetRentalPage() {
               ))}
             </div>
           )}
+
+          <p className="mt-8 text-sm font-medium text-navy-900/65">
+            Fiyatlarımız min. 6-12-24 ay kiralama için geçerlidir.
+          </p>
         </div>
       </section>
 
@@ -504,3 +568,4 @@ export default function FleetRentalPage() {
     </>
   );
 }
+

@@ -1,4 +1,4 @@
-import { Metadata } from "next";
+﻿import { Metadata } from "next";
 import { HomePage } from "@/components/home/home-page";
 import { buildPageMetadata } from "@/lib/seo";
 

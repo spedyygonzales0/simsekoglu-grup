@@ -18,12 +18,12 @@ import {
   ProjectStatus,
   QuoteRequest,
   QuoteRequestStatus,
+  RentalPackage,
+  RentalKm,
   SettingsContent,
   TransmissionType,
-  VariantAvailabilityStatus,
   Vehicle,
   VehicleCategory,
-  VehicleVariant
 } from "@/lib/types";
 
 type AdminTab =
@@ -67,40 +67,39 @@ const vehicleCategoryOptions: VehicleCategory[] = [
   "hatchback",
   "van"
 ];
-const fuelOptions: FuelType[] = ["Benzin", "Dizel", "Hibrit", "Elektrik"];
-const ELECTRIC_FUEL: FuelType = "Elektrik";
+const fuelOptions: FuelType[] = ["Benzin", "Dizel", "Hibrit", "Elektrikli"];
+const ELECTRIC_FUEL: FuelType = "Elektrikli";
 const transmissionOptions: TransmissionType[] = ["Otomatik", "Manuel"];
-const availabilityOptions: VariantAvailabilityStatus[] = ["available", "limited", "unavailable"];
 const carouselSpeedOptions: CarouselSpeed[] = ["slow", "normal", "fast"];
+const KM_VALUES: RentalKm[] = [1000, 2000, 3000];
 
 const VEHICLE_PLACEHOLDER_IMAGE = "/images/fleet/vehicle-placeholder.svg";
 
-const createVehicleOption = (): VehicleVariant => ({
-  variantId: `option-${Math.random().toString(36).slice(2, 9)}`,
-  title: "Standart",
+const createRentalPackage = (): RentalPackage => ({
+  id: `pkg-${Math.random().toString(36).slice(2, 9)}`,
   fuelType: "Benzin",
   transmission: "Otomatik",
-  modelYear: new Date().getFullYear(),
-  monthlyKm: 3000,
-  monthlyPrice: 0,
-  deposit: 0,
-  availabilityStatus: "available",
-  notes: ""
+  prices: { 1000: null, 2000: null, 3000: null }
 });
 
 const createDefaultVehicleForm = (): Omit<Vehicle, "id"> => ({
   brand: "",
   model: "",
+  modelYearLabel: "2024+",
   slug: "",
   primaryCategory: "economy",
   secondaryCategories: [],
+  infoTr: "",
+  infoEn: "",
+  officialUrl: "",
   mainImage: VEHICLE_PLACEHOLDER_IMAGE,
   galleryImages: [VEHICLE_PLACEHOLDER_IMAGE],
   carouselActive: true,
   carouselSpeed: "normal",
   featured: false,
   active: true,
-  variants: [createVehicleOption()]
+  rentalPackages: [],
+  variants: []
 });
 
 const defaultProjectForm: Omit<Project, "id"> = {
@@ -134,10 +133,10 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-navy-900/10 bg-white p-6 shadow-soft">
-      <h2 className="font-display text-2xl text-navy-900">{title}</h2>
-      {description ? <p className="mt-2 text-sm text-navy-900/65">{description}</p> : null}
-      <div className="mt-5">{children}</div>
+    <section className="rounded-2xl border border-navy-900/10 bg-white p-7 shadow-soft">
+      <h2 className="section-title text-[2rem]">{title}</h2>
+      {description ? <p className="mt-2 body-text text-navy-900/68">{description}</p> : null}
+      <div className="mt-6">{children}</div>
     </section>
   );
 }
@@ -151,7 +150,7 @@ function InputField({
 }) {
   return (
     <label className="space-y-1">
-      <span className="text-sm font-medium text-navy-900">{label}</span>
+      <span className="admin-label">{label}</span>
       {children}
     </label>
   );
@@ -179,15 +178,10 @@ function vehicleIdentityKey(brand: string, model: string): string {
   return `${normalizeVehicleIdentity(brand)}::${normalizeVehicleIdentity(model)}`;
 }
 
-function vehicleOptionFingerprint(option: VehicleVariant): string {
+function packageKey(option: Pick<RentalPackage, "fuelType" | "transmission">): string {
   return [
-    normalizeVehicleIdentity(option.title || ""),
     option.fuelType,
-    option.transmission,
-    String(option.modelYear),
-    String(option.monthlyKm),
-    String(option.monthlyPrice),
-    String(option.deposit)
+    option.transmission
   ].join("|");
 }
 
@@ -206,12 +200,6 @@ function nextRequestStatus(status: QuoteRequestStatus): QuoteRequestStatus {
   return "pending";
 }
 
-function availabilityLabelTr(status: VariantAvailabilityStatus): string {
-  if (status === "available") return "Müsait";
-  if (status === "limited") return "Sınırlı";
-  return "Müsait Değil";
-}
-
 function carouselSpeedLabelTr(speed: CarouselSpeed): string {
   if (speed === "slow") return "Yavaş";
   if (speed === "fast") return "Hızlı";
@@ -226,16 +214,30 @@ function toVehicleForm(vehicle: Vehicle): Omit<Vehicle, "id"> {
   return {
     brand: vehicle.brand,
     model: vehicle.model,
+    modelYearLabel: vehicle.modelYearLabel || "2024+",
     slug: vehicle.slug,
     primaryCategory: vehicle.primaryCategory,
     secondaryCategories: vehicle.secondaryCategories,
+    infoTr: vehicle.infoTr || "",
+    infoEn: vehicle.infoEn || "",
+    officialUrl: vehicle.officialUrl || "",
     mainImage: vehicle.mainImage || VEHICLE_PLACEHOLDER_IMAGE,
     galleryImages,
     carouselActive: vehicle.carouselActive ?? galleryImages.length > 1,
     carouselSpeed: vehicle.carouselSpeed ?? "normal",
     featured: vehicle.featured,
     active: vehicle.active,
-    variants: [vehicle.variants[0] ?? createVehicleOption()]
+    rentalPackages: (vehicle.rentalPackages || []).map((pkg) => ({
+      id: pkg.id || `pkg-${Math.random().toString(36).slice(2, 9)}`,
+      fuelType: pkg.fuelType,
+      transmission: pkg.transmission,
+      prices: {
+        1000: typeof pkg.prices?.[1000] === "number" ? Number(pkg.prices[1000]) : null,
+        2000: typeof pkg.prices?.[2000] === "number" ? Number(pkg.prices[2000]) : null,
+        3000: typeof pkg.prices?.[3000] === "number" ? Number(pkg.prices[3000]) : null
+      }
+    })),
+    variants: []
   };
 }
 
@@ -277,6 +279,7 @@ export default function AdminPage() {
   const [vehicleStatusFilter, setVehicleStatusFilter] = useState<VehicleStatusFilter>("all");
   const [showAdvancedVehicleTools, setShowAdvancedVehicleTools] = useState(false);
   const [vehicleEditId, setVehicleEditId] = useState<string | null>(null);
+  const [vehiclePackageIndex, setVehiclePackageIndex] = useState(0);
   const [vehicleMediaPathInput, setVehicleMediaPathInput] = useState("");
   const [projectForm, setProjectForm] = useState<Omit<Project, "id">>(defaultProjectForm);
   const [projectEditId, setProjectEditId] = useState<string | null>(null);
@@ -344,14 +347,17 @@ export default function AdminPage() {
 
   const setupCompleted = setupChecklist.filter((item) => item.done).length;
 
-  const vehicleOption = vehicleForm.variants[0] ?? createVehicleOption();
-  const vehicleHasElectricVariant = vehicleForm.variants.some((item) => item.fuelType === ELECTRIC_FUEL);
+  const vehiclePackage =
+    vehicleForm.rentalPackages?.[vehiclePackageIndex] ?? vehicleForm.rentalPackages?.[0] ?? createRentalPackage();
+  const vehicleHasElectricPackage = (vehicleForm.rentalPackages || []).some((item) => item.fuelType === ELECTRIC_FUEL);
   const vehicleHasElectricCategory =
     vehicleForm.primaryCategory === "electric" || vehicleForm.secondaryCategories.includes("electric");
   const missingElectricVariantForPrimaryCategory =
-    vehicleForm.primaryCategory === "electric" && !vehicleHasElectricVariant;
+    vehicleForm.primaryCategory === "electric" &&
+    (vehicleForm.rentalPackages || []).length > 0 &&
+    !vehicleHasElectricPackage;
   const suggestElectricCategoryForElectricVariant =
-    vehicleHasElectricVariant && !vehicleHasElectricCategory;
+    vehicleHasElectricPackage && !vehicleHasElectricCategory;
   const vehicleFuelOptionsForForm = vehicleForm.primaryCategory === "electric" ? [ELECTRIC_FUEL] : fuelOptions;
   const duplicateVehicleCandidate = useMemo(() => {
     const brand = vehicleForm.brand.trim();
@@ -377,7 +383,9 @@ export default function AdminPage() {
         if (!hasCategory) return false;
       }
       if (vehicleFuelFilter !== "all") {
-        const hasFuel = vehicle.variants.some((item) => item.fuelType === vehicleFuelFilter);
+        const hasFuel = (vehicle.rentalPackages || []).some(
+          (item) => item.fuelType === vehicleFuelFilter
+        );
         if (!hasFuel) return false;
       }
       if (vehicleStatusFilter === "active" && !vehicle.active) return false;
@@ -386,27 +394,75 @@ export default function AdminPage() {
     });
   }, [content.vehicles, vehicleCategoryFilter, vehicleFuelFilter, vehicleSearch, vehicleStatusFilter]);
 
-  const setVehicleOption = <K extends keyof VehicleVariant>(key: K, value: VehicleVariant[K]) => {
+  const setVehiclePackage = <K extends keyof RentalPackage>(index: number, key: K, value: RentalPackage[K]) => {
     setVehicleForm((prev) => {
-      const currentOption = prev.variants[0] ?? createVehicleOption();
-      return {
-        ...prev,
-        variants: [{ ...currentOption, [key]: value }]
-      };
+      const nextPackages = prev.rentalPackages?.length ? [...prev.rentalPackages] : [createRentalPackage()];
+      const current = nextPackages[index] ?? createRentalPackage();
+      nextPackages[index] = { ...current, [key]: value };
+      return { ...prev, rentalPackages: nextPackages };
     });
   };
 
+  const setVehiclePackagePrice = (index: number, km: RentalKm, value: string) => {
+    const num = Number(value);
+    setVehicleForm((prev) => {
+      const nextPackages = prev.rentalPackages?.length ? [...prev.rentalPackages] : [createRentalPackage()];
+      const current = nextPackages[index] ?? createRentalPackage();
+      nextPackages[index] = {
+        ...current,
+        prices: {
+          ...(current.prices || { 1000: null, 2000: null, 3000: null }),
+          [km]: Number.isFinite(num) && num > 0 ? num : null
+        }
+      };
+      return { ...prev, rentalPackages: nextPackages };
+    });
+  };
+
+  const addVehiclePackage = () => {
+    let nextIndex = 0;
+    setVehicleForm((prev) => {
+      const nextOption = createRentalPackage();
+      if (prev.primaryCategory === "electric") {
+        nextOption.fuelType = "Elektrikli";
+      }
+      const nextPackages = [...(prev.rentalPackages || []), nextOption];
+      nextIndex = nextPackages.length - 1;
+      return { ...prev, rentalPackages: nextPackages };
+    });
+    setVehiclePackageIndex(nextIndex);
+  };
+
+  const removeVehiclePackage = (index: number) => {
+    let nextIndex = 0;
+    setVehicleForm((prev) => {
+      const current = prev.rentalPackages || [];
+      if (current.length <= 1) return prev;
+      const nextPackages = current.filter((_, idx) => idx !== index);
+      nextIndex = Math.min(index, Math.max(0, nextPackages.length - 1));
+      return { ...prev, rentalPackages: nextPackages };
+    });
+    setVehiclePackageIndex(nextIndex);
+  };
+
   useEffect(() => {
-    if (vehicleForm.primaryCategory === "electric" && vehicleOption.fuelType !== ELECTRIC_FUEL) {
+    const packageLength = (vehicleForm.rentalPackages || []).length;
+    if (vehiclePackageIndex > 0 && vehiclePackageIndex >= packageLength) {
+      setVehiclePackageIndex(Math.max(0, packageLength - 1));
+    }
+  }, [vehicleForm.rentalPackages, vehiclePackageIndex]);
+
+  useEffect(() => {
+    if (vehicleForm.primaryCategory === "electric") {
       setVehicleForm((prev) => {
-        const currentOption = prev.variants[0] ?? createVehicleOption();
-        return {
-          ...prev,
-          variants: [{ ...currentOption, fuelType: ELECTRIC_FUEL }]
-        };
+        const normalizedPackages: RentalPackage[] = (prev.rentalPackages || []).map((option) => ({
+          ...option,
+          fuelType: "Elektrikli" as RentalPackage["fuelType"]
+        }));
+        return { ...prev, rentalPackages: normalizedPackages };
       });
     }
-  }, [vehicleForm.primaryCategory, vehicleOption.fuelType]);
+  }, [vehicleForm.primaryCategory]);
 
   const cleanMediaPath = (value: string) => value.trim();
 
@@ -526,12 +582,34 @@ export default function AdminPage() {
   const onVehicleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const option = vehicleForm.variants[0] ?? createVehicleOption();
+    const normalizedPackages = (vehicleForm.rentalPackages || []).map((pkg, index) => ({
+      id: pkg.id || `pkg-${Math.random().toString(36).slice(2, 9)}`,
+      fuelType: pkg.fuelType as RentalPackage["fuelType"],
+      transmission: pkg.transmission,
+      prices: {
+        1000: Number(pkg.prices?.[1000]) > 0 ? Number(pkg.prices?.[1000]) : null,
+        2000: Number(pkg.prices?.[2000]) > 0 ? Number(pkg.prices?.[2000]) : null,
+        3000: Number(pkg.prices?.[3000]) > 0 ? Number(pkg.prices?.[3000]) : null
+      }
+    }));
+
+    const packageKeys = new Set<string>();
+    for (const pkg of normalizedPackages) {
+      const key = packageKey(pkg);
+      if (packageKeys.has(key)) {
+        alert("Bu yakıt ve vites paketi zaten eklenmiş.");
+        setVehicleWizardStep(2);
+        return;
+      }
+      packageKeys.add(key);
+    }
+
     const normalizedGallery = Array.from(
       new Set([vehicleForm.mainImage || VEHICLE_PLACEHOLDER_IMAGE, ...(vehicleForm.galleryImages || [])].filter(Boolean))
     );
     const payload: Omit<Vehicle, "id"> = {
       ...vehicleForm,
+      modelYearLabel: vehicleForm.modelYearLabel?.trim() || "2024+",
       slug: buildSlug(vehicleForm.brand, vehicleForm.model),
       secondaryCategories: vehicleForm.secondaryCategories.filter(
         (item) => item !== vehicleForm.primaryCategory
@@ -540,14 +618,8 @@ export default function AdminPage() {
       galleryImages: normalizedGallery,
       carouselActive: vehicleForm.carouselActive ?? normalizedGallery.length > 1,
       carouselSpeed: vehicleForm.carouselSpeed ?? "normal",
-      variants: [
-        {
-          ...option,
-          variantId: option.variantId || `option-${Math.random().toString(36).slice(2, 9)}`,
-          title: option.title.trim() || "Standart",
-          notes: option.notes?.trim() || ""
-        }
-      ]
+      rentalPackages: normalizedPackages,
+      variants: []
     };
 
     if (!payload.brand.trim() || !payload.model.trim()) {
@@ -555,23 +627,30 @@ export default function AdminPage() {
       return;
     }
 
-    if (payload.primaryCategory === "electric" && !payload.variants.some((item) => item.fuelType === ELECTRIC_FUEL)) {
-      alert("Ana kategori Elektrikli ise en az bir araç seçeneğinin yakıt tipi Elektrik olmalıdır.");
+    if (
+      payload.primaryCategory === "electric" &&
+      payload.rentalPackages.length > 0 &&
+      !payload.rentalPackages.some((item) => item.fuelType === ELECTRIC_FUEL)
+    ) {
+      alert("Ana kategori Elektrikli ise en az bir kiralama paketinin yakıt tipi Elektrikli olmalıdır.");
       setVehicleWizardStep(2);
       return;
     }
 
     if (duplicateVehicleCandidate) {
-      const wantsVariantMerge = window.confirm("Bu araç zaten var. Yeni bir seçenek eklemek ister misiniz?");
+      const wantsVariantMerge = window.confirm("Bu araç zaten var. Yeni bir kiralama paketi eklemek ister misiniz?");
       if (!wantsVariantMerge) return;
 
-      const incomingOption = payload.variants[0];
-      const existingVariantPrints = new Set(
-        duplicateVehicleCandidate.variants.map((item) => vehicleOptionFingerprint(item))
+      const existingPackageKeys = new Set(
+        (duplicateVehicleCandidate.rentalPackages || []).map((item) => packageKey(item))
       );
-      const nextVariants = existingVariantPrints.has(vehicleOptionFingerprint(incomingOption))
-        ? duplicateVehicleCandidate.variants
-        : [...duplicateVehicleCandidate.variants, incomingOption];
+      const incomingUniquePackages = payload.rentalPackages.filter(
+        (item) => !existingPackageKeys.has(packageKey(item))
+      );
+
+      const nextPackages = incomingUniquePackages.length
+        ? [...(duplicateVehicleCandidate.rentalPackages || []), ...incomingUniquePackages]
+        : duplicateVehicleCandidate.rentalPackages || [];
 
       const nextSecondaryCategories = Array.from(
         new Set([
@@ -598,7 +677,8 @@ export default function AdminPage() {
         carouselSpeed: duplicateVehicleCandidate.carouselSpeed || payload.carouselSpeed,
         featured: duplicateVehicleCandidate.featured || payload.featured,
         active: duplicateVehicleCandidate.active || payload.active,
-        variants: nextVariants
+        rentalPackages: nextPackages,
+        variants: []
       });
 
       if (vehicleEditId && vehicleEditId !== duplicateVehicleCandidate.id) {
@@ -608,8 +688,13 @@ export default function AdminPage() {
       setVehicleEditId(null);
       setVehicleForm(createDefaultVehicleForm());
       setVehicleMediaPathInput("");
+      setVehiclePackageIndex(0);
       setVehicleWizardStep(1);
-      flashSaved("Araç seçeneği mevcut araca eklendi.");
+      flashSaved(
+        incomingUniquePackages.length
+          ? `${incomingUniquePackages.length} kiralama paketi mevcut araca eklendi.`
+          : "Araç bilgileri güncellendi."
+      );
       return;
     }
 
@@ -619,6 +704,7 @@ export default function AdminPage() {
     setVehicleEditId(null);
     setVehicleForm(createDefaultVehicleForm());
     setVehicleMediaPathInput("");
+    setVehiclePackageIndex(0);
     setVehicleWizardStep(1);
     flashSaved(vehicleEditId ? "Araç güncellendi." : "Araç eklendi.");
   };
@@ -635,6 +721,7 @@ export default function AdminPage() {
     setVehicleEditId(null);
     setVehicleForm(createDefaultVehicleForm());
     setVehicleMediaPathInput("");
+    setVehiclePackageIndex(0);
     setVehicleWizardStep(1);
   };
 
@@ -671,16 +758,16 @@ export default function AdminPage() {
 
   if (!isAdminAuthenticated) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-cloud-100 p-6">
-        <form onSubmit={onAdminLogin} className="w-full max-w-md rounded-2xl bg-white p-8 shadow-soft">
+      <main className="admin-surface flex min-h-screen items-center justify-center bg-cloud-100 p-6">
+        <form onSubmit={onAdminLogin} className="w-full max-w-md rounded-2xl bg-white p-9 shadow-soft">
           <h1 className="font-display text-3xl text-navy-900">Yönetim Girişi</h1>
-          <p className="mt-2 text-sm text-navy-900/70">
+          <p className="mt-2 body-text text-navy-900/70">
             Geçici giriş bilgileri: <strong>admin / admin123</strong>
           </p>
-          <div className="mt-6 space-y-4">
+          <div className="mt-7 space-y-5">
             <InputField label="Kullanıcı Adı">
               <input
-                className="w-full rounded-lg border border-navy-900/20 px-4 py-3"
+                className="admin-input"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
               />
@@ -688,16 +775,16 @@ export default function AdminPage() {
             <InputField label="Şifre">
               <input
                 type="password"
-                className="w-full rounded-lg border border-navy-900/20 px-4 py-3"
+                className="admin-input"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
             </InputField>
           </div>
-          {loginError ? <p className="mt-3 text-sm text-red-600">{loginError}</p> : null}
+          {loginError ? <p className="mt-3 text-base text-red-600">{loginError}</p> : null}
           <button
             type="submit"
-            className="mt-6 w-full rounded-lg bg-navy-900 px-4 py-3 font-semibold text-white transition hover:bg-navy-700"
+            className="mt-7 w-full rounded-lg bg-navy-900 px-4 py-3 text-base font-semibold text-white transition hover:bg-navy-700"
           >
             Giriş Yap
           </button>
@@ -707,13 +794,13 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="min-h-screen bg-cloud-50">
+    <main className="admin-surface min-h-screen bg-cloud-50">
       <div className="flex min-h-screen">
         <aside className="hidden w-80 flex-col bg-navy-900 text-white md:flex">
           <div className="border-b border-white/10 px-6 py-6">
-            <p className="text-xs uppercase tracking-[0.2em] text-gold-300">Yönetim Paneli</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.1em] text-gold-300">Yönetim Paneli</p>
             <h1 className="mt-3 font-display text-2xl">Şimşekoğlu Grup</h1>
-            <p className="mt-2 text-xs text-white/60">Kurumsal İçerik Yönetimi</p>
+            <p className="mt-2 text-sm text-white/70">Kurumsal İçerik Yönetimi</p>
           </div>
           <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
             {tabs.map((item) => (
@@ -721,7 +808,7 @@ export default function AdminPage() {
                 key={item.id}
                 type="button"
                 onClick={() => setTab(item.id)}
-                className={`w-full rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
+                className={`w-full rounded-xl px-4 py-3.5 text-left text-base font-semibold transition ${
                   tab === item.id ? "bg-gold-500 text-navy-900" : "text-white/85 hover:bg-white/10"
                 }`}
               >
@@ -733,7 +820,7 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={logoutAdmin}
-              className="w-full rounded-lg border border-white/25 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white hover:text-navy-900"
+              className="w-full rounded-lg border border-white/25 px-4 py-3 text-base font-semibold text-white transition hover:bg-white hover:text-navy-900"
             >
               Çıkış Yap
             </button>
@@ -745,7 +832,7 @@ export default function AdminPage() {
             <select
               value={tab}
               onChange={(event) => setTab(event.target.value as AdminTab)}
-              className="w-full rounded-xl border border-navy-900/20 bg-white px-4 py-3 text-sm font-medium text-navy-900"
+              className="admin-input rounded-xl font-semibold"
             >
               {tabs.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -756,7 +843,7 @@ export default function AdminPage() {
           </div>
 
           {saved ? (
-            <div className="mb-4 rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">
+            <div className="mb-4 rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-base text-green-700">
               {saved}
             </div>
           ) : null}
@@ -765,15 +852,15 @@ export default function AdminPage() {
             <div className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-2xl border border-navy-900/10 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-navy-900/60">Aktif Araç</p>
+                  <p className="text-base text-navy-900/65">Aktif Araç</p>
                   <p className="mt-2 font-display text-3xl text-navy-900">{summary.activeVehicles}</p>
                 </div>
                 <div className="rounded-2xl border border-navy-900/10 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-navy-900/60">Öne Çıkan Araç</p>
+                  <p className="text-base text-navy-900/65">Öne Çıkan Araç</p>
                   <p className="mt-2 font-display text-3xl text-navy-900">{summary.featuredVehicles}</p>
                 </div>
                 <div className="rounded-2xl border border-navy-900/10 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-navy-900/60">Toplam Proje</p>
+                  <p className="text-base text-navy-900/65">Toplam Proje</p>
                   <p className="mt-2 font-display text-3xl text-navy-900">{summary.totalProjects}</p>
                 </div>
                 <button
@@ -781,9 +868,9 @@ export default function AdminPage() {
                   onClick={() => setTab("requests")}
                   className="rounded-2xl border border-navy-900/10 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-gold-500/45 hover:shadow-md"
                 >
-                  <p className="text-sm text-navy-900/60">Bekleyen Talep</p>
+                  <p className="text-base text-navy-900/65">Bekleyen Talep</p>
                   <p className="mt-2 font-display text-3xl text-navy-900">{summary.pendingRequests}</p>
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold-600">
+                  <p className="mt-2 text-sm font-semibold tracking-[0.03em] text-gold-600">
                     Teklif Taleplerine Git
                   </p>
                 </button>
@@ -885,14 +972,17 @@ export default function AdminPage() {
                           placeholder="Örn: i5 eDrive40"
                         />
                       </InputField>
-                      <InputField label="Model Yılı">
+                      <InputField label="Model Yılı Yazısı">
                         <input
-                          type="number"
-                          value={vehicleOption.modelYear}
+                          value={vehicleForm.modelYearLabel}
                           onChange={(event) =>
-                            setVehicleOption("modelYear", Number(event.target.value) || new Date().getFullYear())
+                            setVehicleForm((prev) => ({
+                              ...prev,
+                              modelYearLabel: event.target.value || "2024+"
+                            }))
                           }
                           className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                          placeholder="2024+"
                         />
                       </InputField>
                       <InputField label="Ana Kategori">
@@ -947,9 +1037,52 @@ export default function AdminPage() {
                             })}
                         </div>
                       </div>
+                      <InputField label="Araç Bilgisi (TR)">
+                        <textarea
+                          rows={3}
+                          value={vehicleForm.infoTr}
+                          onChange={(event) =>
+                            setVehicleForm((prev) => ({
+                              ...prev,
+                              infoTr: event.target.value
+                            }))
+                          }
+                          className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                          placeholder="Araç ile ilgili kısa kurumsal bilgi..."
+                        />
+                      </InputField>
+                      <InputField label="Araç Bilgisi (EN)">
+                        <textarea
+                          rows={3}
+                          value={vehicleForm.infoEn}
+                          onChange={(event) =>
+                            setVehicleForm((prev) => ({
+                              ...prev,
+                              infoEn: event.target.value
+                            }))
+                          }
+                          className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                          placeholder="Short corporate vehicle description..."
+                        />
+                      </InputField>
+                      <div className="md:col-span-2">
+                        <InputField label="Resmi Site Linki (Opsiyonel)">
+                          <input
+                            value={vehicleForm.officialUrl}
+                            onChange={(event) =>
+                              setVehicleForm((prev) => ({
+                                ...prev,
+                                officialUrl: event.target.value
+                              }))
+                            }
+                            className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                            placeholder="https://..."
+                          />
+                        </InputField>
+                      </div>
                       {duplicateVehicleCandidate ? (
                         <div className="md:col-span-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                          Bu araç zaten var. Yeni bir seçenek eklemek ister misiniz?
+                          Bu araç zaten var. Yeni bir kiralama paketi eklemek ister misiniz?
                         </div>
                       ) : null}
                     </div>
@@ -957,99 +1090,192 @@ export default function AdminPage() {
 
                   {vehicleWizardStep === 2 ? (
                     <div className="space-y-4">
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <InputField label="Araç Seçeneği">
-                          <input
-                            value={vehicleOption.title}
-                            onChange={(event) => setVehicleOption("title", event.target.value)}
-                            className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                            placeholder="Örn: Dizel Otomatik"
-                          />
-                        </InputField>
-                        <InputField label="Yakıt Tipi">
-                          <select
-                            value={vehicleOption.fuelType}
-                            onChange={(event) => setVehicleOption("fuelType", event.target.value as FuelType)}
-                            disabled={vehicleForm.primaryCategory === "electric"}
-                            className="w-full rounded-lg border border-navy-900/20 px-3 py-2 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                        Lütfen sadece araçta gerçekten bulunan yakıt, vites ve kilometre seçeneklerini giriniz. Sistem tahmin yapmaz.
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-navy-900/10 bg-white p-3">
+                        <p className="text-sm font-semibold text-navy-900">
+                          Araç Kiralama Paketleri: {(vehicleForm.rentalPackages || []).length} adet
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={addVehiclePackage}
+                            className="rounded-lg border border-navy-900/20 px-3 py-2 text-xs font-semibold text-navy-900 hover:border-gold-500 hover:text-gold-600"
                           >
-                            {vehicleFuelOptionsForForm.map((item) => (
-                              <option key={item} value={item}>
-                                {item}
-                              </option>
-                            ))}
-                          </select>
-                          {vehicleForm.primaryCategory === "electric" ? (
-                            <p className="mt-2 text-xs text-gold-700">
-                              Elektrikli kategori seçildiği için yakıt tipi otomatik olarak Elektrik ayarlandı.
-                            </p>
-                          ) : null}
-                        </InputField>
-                        <InputField label="Vites">
-                          <select
-                            value={vehicleOption.transmission}
-                            onChange={(event) =>
-                              setVehicleOption("transmission", event.target.value as TransmissionType)
-                            }
-                            className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                          >
-                            {transmissionOptions.map((item) => (
-                              <option key={item} value={item}>
-                                {item}
-                              </option>
-                            ))}
-                          </select>
-                        </InputField>
-                        <InputField label="Aylık KM">
-                          <input
-                            type="number"
-                            value={vehicleOption.monthlyKm}
-                            onChange={(event) => setVehicleOption("monthlyKm", Number(event.target.value) || 0)}
-                            className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                          />
-                        </InputField>
-                        <InputField label="Aylık Fiyat (TL)">
-                          <input
-                            type="number"
-                            value={vehicleOption.monthlyPrice}
-                            onChange={(event) => setVehicleOption("monthlyPrice", Number(event.target.value) || 0)}
-                            className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                          />
-                        </InputField>
-                        <InputField label="Depozito (TL)">
-                          <input
-                            type="number"
-                            value={vehicleOption.deposit}
-                            onChange={(event) => setVehicleOption("deposit", Number(event.target.value) || 0)}
-                            className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                          />
-                        </InputField>
-                        <InputField label="Müsaitlik">
-                          <select
-                            value={vehicleOption.availabilityStatus}
-                            onChange={(event) =>
-                              setVehicleOption("availabilityStatus", event.target.value as VariantAvailabilityStatus)
-                            }
-                            className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                          >
-                            {availabilityOptions.map((item) => (
-                              <option key={item} value={item}>
-                                {availabilityLabelTr(item)}
-                              </option>
-                            ))}
-                          </select>
-                        </InputField>
+                            Paket Ekle
+                          </button>
+                        </div>
                       </div>
 
-                      {missingElectricVariantForPrimaryCategory ? (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {(vehicleForm.rentalPackages || []).map((pkg, index) => {
+                          const isActive = index === vehiclePackageIndex;
+                          return (
+                            <button
+                              key={pkg.id || index}
+                              type="button"
+                              onClick={() => setVehiclePackageIndex(index)}
+                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                                isActive
+                                  ? "border-gold-500 bg-gold-50"
+                                  : "border-navy-900/15 bg-white hover:border-gold-300"
+                              }`}
+                            >
+                              <p className="text-sm font-semibold text-navy-900">
+                                Paket {index + 1}
+                              </p>
+                              <p className="mt-1 text-xs text-navy-900/65">
+                                {pkg.fuelType} • {pkg.transmission}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {(vehicleForm.rentalPackages || []).length ? (
+                        <div className="rounded-2xl border border-navy-900/10 bg-cloud-50 p-4">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="text-sm font-semibold text-navy-900">
+                              Düzenlenen Paket: {vehiclePackageIndex + 1}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => removeVehiclePackage(vehiclePackageIndex)}
+                              className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={(vehicleForm.rentalPackages || []).length <= 1}
+                            >
+                              Paketi Sil
+                            </button>
+                          </div>
+
+                          <div className="overflow-x-auto rounded-xl border border-navy-900/15 bg-white">
+                            <table className="min-w-[720px] w-full text-sm">
+                              <thead className="bg-cloud-100/70 text-navy-900/70">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-semibold">Yakıt Tipi</th>
+                                  <th className="px-3 py-2 text-left font-semibold">Vites</th>
+                                  <th className="px-3 py-2 text-left font-semibold">1000 KM Fiyatı</th>
+                                  <th className="px-3 py-2 text-left font-semibold">2000 KM Fiyatı</th>
+                                  <th className="px-3 py-2 text-left font-semibold">3000 KM Fiyatı</th>
+                                  <th className="px-3 py-2 text-left font-semibold">İşlem</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(vehicleForm.rentalPackages || []).map((pkg, idx) => (
+                                  <tr key={pkg.id || idx} className="border-t border-navy-900/10">
+                                    <td className="px-3 py-2">
+                                      <select
+                                        value={pkg.fuelType}
+                                        onChange={(event) =>
+                                          setVehiclePackage(idx, "fuelType", event.target.value as RentalPackage["fuelType"])
+                                        }
+                                        disabled={vehicleForm.primaryCategory === "electric"}
+                                        className="w-full rounded-lg border border-navy-900/20 px-2 py-2"
+                                      >
+                                        {vehicleFuelOptionsForForm.map((item) => (
+                                          <option key={item} value={item}>
+                                            {item}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <select
+                                        value={pkg.transmission}
+                                        onChange={(event) =>
+                                          setVehiclePackage(idx, "transmission", event.target.value as TransmissionType)
+                                        }
+                                        className="w-full rounded-lg border border-navy-900/20 px-2 py-2"
+                                      >
+                                        {transmissionOptions.map((item) => (
+                                          <option key={item} value={item}>
+                                            {item}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                    {KM_VALUES.map((km) => (
+                                      <td key={km} className="px-3 py-2">
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          value={pkg.prices?.[km] ?? ""}
+                                          onChange={(event) => setVehiclePackagePrice(idx, km, event.target.value)}
+                                          className="w-full rounded-lg border border-navy-900/20 px-2 py-2"
+                                          placeholder="Boş bırakılabilir"
+                                        />
+                                      </td>
+                                    ))}
+                                    <td className="px-3 py-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => removeVehiclePackage(idx)}
+                                        className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                                        disabled={(vehicleForm.rentalPackages || []).length <= 1}
+                                      >
+                                        Sil
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          <div className="mt-3 grid gap-4 md:grid-cols-2">
+                            <InputField label="Yakıt Tipi">
+                              <select
+                                value={vehiclePackage.fuelType}
+                                onChange={(event) =>
+                                  setVehiclePackage(
+                                    vehiclePackageIndex,
+                                    "fuelType",
+                                    event.target.value as RentalPackage["fuelType"]
+                                  )
+                                }
+                                disabled={vehicleForm.primaryCategory === "electric"}
+                                className="w-full rounded-lg border border-navy-900/20 px-3 py-2 disabled:cursor-not-allowed disabled:bg-slate-100"
+                              >
+                                {vehicleFuelOptionsForForm.map((item) => (
+                                  <option key={item} value={item}>
+                                    {item}
+                                  </option>
+                                ))}
+                              </select>
+                            </InputField>
+                            <InputField label="Vites">
+                              <select
+                                value={vehiclePackage.transmission}
+                                onChange={(event) =>
+                                  setVehiclePackage(vehiclePackageIndex, "transmission", event.target.value as TransmissionType)
+                                }
+                                className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                              >
+                                {transmissionOptions.map((item) => (
+                                  <option key={item} value={item}>
+                                    {item}
+                                  </option>
+                                ))}
+                              </select>
+                            </InputField>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-navy-900/20 bg-white px-4 py-3 text-sm text-navy-900/70">
+                          Henüz kiralama paketi eklenmedi. Paket Ekle butonuyla başlayabilirsiniz.
+                        </div>
+                      )}
+
+                      {(vehicleForm.rentalPackages || []).length > 0 && missingElectricVariantForPrimaryCategory ? (
                         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                          Ana kategori Elektrikli seçili. En az bir araç seçeneğinin yakıt tipi Elektrik olmalıdır.
+                          Ana kategori Elektrikli seçili. En az bir kiralama paketinin yakıt tipi Elektrikli olmalıdır.
                         </div>
                       ) : null}
 
-                      {suggestElectricCategoryForElectricVariant ? (
+                      {(vehicleForm.rentalPackages || []).length > 0 && suggestElectricCategoryForElectricVariant ? (
                         <div className="rounded-xl border border-gold-300/60 bg-gold-50 px-4 py-3 text-sm text-gold-700">
-                          Araç seçeneğinde Elektrik yakıtı var. Bu aracı Ana Kategori veya Ek Kategoriler içinde
+                          Kiralama paketinde Elektrikli yakıtı var. Bu aracı Ana Kategori veya Ek Kategoriler içinde
                           Elektrikli olarak işaretlemeniz önerilir.
                         </div>
                       ) : null}
@@ -1316,11 +1542,12 @@ export default function AdminPage() {
                       </thead>
                       <tbody>
                         {filteredVehicles.map((vehicle) => {
-                          const lowestPrice = vehicle.variants.length
-                            ? Math.min(...vehicle.variants.map((item) => item.monthlyPrice))
-                            : 0;
+                          const lowestPriceCandidates = (vehicle.rentalPackages || [])
+                            .flatMap((pkg) => [pkg.prices[1000], pkg.prices[2000], pkg.prices[3000]])
+                            .filter((price): price is number => typeof price === "number" && price > 0);
+                          const lowestPrice = lowestPriceCandidates.length ? Math.min(...lowestPriceCandidates) : 0;
                           const fuelText =
-                            Array.from(new Set(vehicle.variants.map((item) => item.fuelType))).join(", ") || "-";
+                            Array.from(new Set((vehicle.rentalPackages || []).map((item) => item.fuelType))).join(", ") || "-";
                           const vehicleWithoutId = toVehicleForm(vehicle);
                           return (
                             <tr key={vehicle.id} className="border-t border-navy-900/10 align-top">
@@ -1340,7 +1567,7 @@ export default function AdminPage() {
                                       {vehicle.brand} {vehicle.model}
                                     </p>
                                     <p className="text-xs text-navy-900/60">
-                                      Araç Seçeneği: {vehicle.variants[0]?.title || "Standart"}
+                                      Paket: {(vehicle.rentalPackages || []).length} adet
                                     </p>
                                   </div>
                                 </div>
@@ -1388,6 +1615,7 @@ export default function AdminPage() {
                                         carouselSpeed: vehicle.carouselSpeed ?? "normal"
                                       });
                                       setVehicleMediaPathInput("");
+                                      setVehiclePackageIndex(0);
                                       setVehicleWizardStep(1);
                                     }}
                                   >
@@ -1420,14 +1648,14 @@ export default function AdminPage() {
                                         ),
                                         carouselActive: vehicle.carouselActive ?? true,
                                         carouselSpeed: vehicle.carouselSpeed ?? "normal",
-                                        variants: [
-                                          {
-                                            ...(vehicle.variants[0] ?? createVehicleOption()),
-                                            variantId: `option-${Math.random().toString(36).slice(2, 9)}`
-                                          }
-                                        ]
+                                        rentalPackages: (vehicle.rentalPackages || []).map((pkg) => ({
+                                          ...pkg,
+                                          id: `pkg-${Math.random().toString(36).slice(2, 9)}`
+                                        })),
+                                        variants: []
                                       });
                                       setVehicleMediaPathInput("");
+                                      setVehiclePackageIndex(0);
                                       setVehicleWizardStep(1);
                                       flashSaved("Araç kopyası oluşturuldu. Düzenleyip kaydedebilirsiniz.");
                                     }}
@@ -2530,3 +2758,4 @@ export default function AdminPage() {
     </main>
   );
 }
+

@@ -27,6 +27,7 @@ import {
   ProjectStatus,
   QuoteRequest,
   QuoteRequestStatus,
+  RentalPackage,
   ServiceType,
   SettingsContent,
   SiteContent,
@@ -109,7 +110,7 @@ const VEHICLE_CATEGORIES: VehicleCategory[] = [
   "van"
 ];
 
-const FUEL_TYPES: FuelType[] = ["Benzin", "Dizel", "Hibrit", "Elektrik"];
+const FUEL_TYPES: FuelType[] = ["Benzin", "Dizel", "Hibrit", "Elektrik", "Elektrikli"];
 const TRANSMISSION_TYPES: TransmissionType[] = ["Otomatik", "Manuel"];
 const AVAILABILITY_TYPES: VariantAvailabilityStatus[] = ["available", "limited", "unavailable"];
 const PROJECT_STATUS: ProjectStatus[] = ["completed", "ongoing", "planned"];
@@ -155,6 +156,7 @@ const MOCK_QUOTE_REQUESTS: QuoteRequest[] = [
 
 type LegacyVehicle = Partial<Vehicle> & {
   brandModel?: string;
+  modelYearLabel?: string;
   type?: string;
   fuelType?: FuelType;
   transmission?: TransmissionType;
@@ -167,6 +169,7 @@ type LegacyVehicle = Partial<Vehicle> & {
   notes?: string;
   imageUrl?: string;
   variants?: Partial<VehicleVariant>[];
+  rentalPackages?: Partial<RentalPackage>[];
 };
 
 type LegacyProject = Partial<Project>;
@@ -191,6 +194,7 @@ function asVehicleCategory(value: string | undefined, fallback: VehicleCategory)
 }
 
 function asFuelType(value: string | undefined, fallback: FuelType): FuelType {
+  if (value === "Elektrik") return "Elektrikli";
   if (value && FUEL_TYPES.includes(value as FuelType)) return value as FuelType;
   return fallback;
 }
@@ -223,13 +227,65 @@ function normalizeVariant(source: Partial<VehicleVariant>, index: number): Vehic
     title: source.title?.trim() || `Varyant ${index + 1}`,
     fuelType: asFuelType(source.fuelType, "Benzin"),
     transmission: asTransmission(source.transmission, "Otomatik"),
-    modelYear: Number(source.modelYear) || new Date().getFullYear(),
+    modelYear: Number(source.modelYear) || 2024,
     monthlyKm: Number(source.monthlyKm) || 3000,
     monthlyPrice: Number(source.monthlyPrice) || 0,
     deposit: Number(source.deposit) || 0,
     availabilityStatus: asAvailability(source.availabilityStatus),
     notes: source.notes?.trim() || ""
   };
+}
+
+function createEmptyPriceMap(): RentalPackage["prices"] {
+  return {
+    1000: null,
+    2000: null,
+    3000: null
+  };
+}
+
+function normalizePackagePrice(value: unknown): number | null {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return num;
+}
+
+function normalizeRentalPackage(source: Partial<RentalPackage>, index: number): RentalPackage {
+  const normalizedFuel = asFuelType(source.fuelType, "Benzin");
+  return {
+    id: source.id?.trim() || generateId(`pkg${index + 1}`),
+    fuelType: normalizedFuel === "Elektrik" ? "Elektrikli" : normalizedFuel,
+    transmission: asTransmission(source.transmission, "Otomatik"),
+    prices: {
+      1000: normalizePackagePrice(source.prices?.[1000]),
+      2000: normalizePackagePrice(source.prices?.[2000]),
+      3000: normalizePackagePrice(source.prices?.[3000])
+    }
+  };
+}
+
+function variantsToRentalPackages(variants: Partial<VehicleVariant>[]): RentalPackage[] {
+  const grouped = new Map<string, RentalPackage>();
+  variants.forEach((variant, index) => {
+    const fuel = asFuelType(variant.fuelType, "Benzin");
+    const normalizedFuel = fuel === "Elektrik" ? "Elektrikli" : fuel;
+    const transmission = asTransmission(variant.transmission, "Otomatik");
+    const key = `${normalizedFuel}|${transmission}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        id: variant.variantId?.trim() || generateId(`pkgv${index + 1}`),
+        fuelType: normalizedFuel,
+        transmission,
+        prices: createEmptyPriceMap()
+      });
+    }
+    const monthlyKm = Number(variant.monthlyKm);
+    const monthlyPrice = normalizePackagePrice(variant.monthlyPrice);
+    if ((monthlyKm === 1000 || monthlyKm === 2000 || monthlyKm === 3000) && monthlyPrice !== null) {
+      grouped.get(key)!.prices[monthlyKm] = monthlyPrice;
+    }
+  });
+  return Array.from(grouped.values());
 }
 
 function normalizeVehicle(source: LegacyVehicle, index: number): Vehicle {
@@ -240,7 +296,12 @@ function normalizeVehicle(source: LegacyVehicle, index: number): Vehicle {
 
   const brand = source.brand?.trim() || legacyBrand || "Marka";
   const model = source.model?.trim() || legacyModel || "Model";
+  const modelYearLabel = source.modelYearLabel?.trim() || "2024+";
   const slug = source.slug?.trim() || toSlug(`${brand}-${model}`);
+  const defaultVehicleInfo = defaultSiteContent.vehicles.find((item) => item.slug === slug);
+  const infoTr = source.infoTr?.trim() || defaultVehicleInfo?.infoTr || "";
+  const infoEn = source.infoEn?.trim() || defaultVehicleInfo?.infoEn || "";
+  const officialUrl = source.officialUrl?.trim() || defaultVehicleInfo?.officialUrl || "";
 
   const primaryCategory = asVehicleCategory(source.primaryCategory ?? legacyType, "economy");
   const rawSecondary = Array.isArray(source.secondaryCategories)
@@ -275,11 +336,13 @@ function normalizeVehicle(source: LegacyVehicle, index: number): Vehicle {
       ? [legacyVariant]
       : [];
 
-  const variants = variantsSource.length
-    ? variantsSource.map((item, variantIndex) => normalizeVariant(item, variantIndex))
-    : defaultSiteContent.vehicles[index % defaultSiteContent.vehicles.length].variants.map((item, variantIndex) =>
-        normalizeVariant(item, variantIndex)
-      );
+  const packageSource: Partial<RentalPackage>[] = Array.isArray(source.rentalPackages)
+    ? source.rentalPackages
+    : variantsToRentalPackages(variantsSource);
+
+  const rentalPackages = packageSource
+    .map((item, packageIndex) => normalizeRentalPackage(item, packageIndex))
+    .filter((pkg) => pkg.id && pkg.fuelType && pkg.transmission);
 
   const normalizedMainImage = ensureFleetImage(source.mainImage || source.imageUrl || "");
   const normalizedGalleryImages = (Array.isArray(source.galleryImages) ? source.galleryImages : [])
@@ -291,16 +354,21 @@ function normalizeVehicle(source: LegacyVehicle, index: number): Vehicle {
     id: source.id?.trim() || generateId("v"),
     brand,
     model,
+    modelYearLabel,
     slug,
     primaryCategory,
     secondaryCategories,
+    infoTr,
+    infoEn,
+    officialUrl,
     mainImage: normalizedMainImage,
     galleryImages: galleryWithMain,
     carouselActive: source.carouselActive ?? galleryWithMain.length > 1,
     carouselSpeed: asCarouselSpeed(source.carouselSpeed),
     featured: Boolean(source.featured),
     active: source.active !== false,
-    variants
+    rentalPackages,
+    variants: []
   };
 }
 
@@ -317,36 +385,33 @@ function vehicleModelKey(vehicle: Pick<Vehicle, "brand" | "model">): string {
   return `${normalizeVehicleIdentity(vehicle.brand)}::${normalizeVehicleIdentity(vehicle.model)}`;
 }
 
-function variantFingerprint(variant: VehicleVariant): string {
+function rentalPackageFingerprint(pkg: RentalPackage): string {
   return [
-    normalizeVehicleIdentity(variant.title || ""),
-    variant.fuelType,
-    variant.transmission,
-    String(variant.modelYear),
-    String(variant.monthlyKm),
-    String(variant.monthlyPrice),
-    String(variant.deposit),
-    variant.availabilityStatus
+    pkg.fuelType,
+    pkg.transmission,
+    String(pkg.prices[1000] ?? ""),
+    String(pkg.prices[2000] ?? ""),
+    String(pkg.prices[3000] ?? "")
   ].join("|");
 }
 
-function mergeVehicleVariants(base: VehicleVariant[], incoming: VehicleVariant[]): VehicleVariant[] {
-  const merged: VehicleVariant[] = [];
-  const seenVariantIds = new Set<string>();
-  const seenVariantPrints = new Set<string>();
+function mergeRentalPackages(base: RentalPackage[], incoming: RentalPackage[]): RentalPackage[] {
+  const merged: RentalPackage[] = [];
+  const seenKeys = new Set<string>();
+  const seenPrints = new Set<string>();
 
-  const pushVariant = (candidate: VehicleVariant) => {
-    const normalized = normalizeVariant(candidate, merged.length);
-    const variantIdKey = normalizeVehicleIdentity(normalized.variantId);
-    const fingerprint = variantFingerprint(normalized);
-    if (seenVariantIds.has(variantIdKey) || seenVariantPrints.has(fingerprint)) return;
-    seenVariantIds.add(variantIdKey);
-    seenVariantPrints.add(fingerprint);
+  const pushPackage = (candidate: RentalPackage) => {
+    const normalized = normalizeRentalPackage(candidate, merged.length);
+    const key = `${normalized.fuelType}|${normalized.transmission}`.toLowerCase();
+    const fingerprint = rentalPackageFingerprint(normalized);
+    if (seenKeys.has(key) || seenPrints.has(fingerprint)) return;
+    seenKeys.add(key);
+    seenPrints.add(fingerprint);
     merged.push(normalized);
   };
 
-  base.forEach(pushVariant);
-  incoming.forEach(pushVariant);
+  base.forEach(pushPackage);
+  incoming.forEach(pushPackage);
 
   return merged;
 }
@@ -365,7 +430,8 @@ function dedupeVehiclesByModel(vehicles: Vehicle[]): Vehicle[] {
         ...normalized,
         secondaryCategories: [...normalized.secondaryCategories],
         galleryImages: [...(normalized.galleryImages || [])],
-        variants: [...normalized.variants]
+        rentalPackages: [...(normalized.rentalPackages || [])],
+        variants: []
       };
       mergedByKey.set(key, nextVehicle);
       orderedKeys.push(key);
@@ -391,10 +457,13 @@ function dedupeVehiclesByModel(vehicles: Vehicle[]): Vehicle[] {
       ].filter(Boolean))
     );
 
-    const nextVariants = mergeVehicleVariants(existing.variants, normalized.variants);
+    const nextPackages = mergeRentalPackages(existing.rentalPackages || [], normalized.rentalPackages || []);
 
     const nextVehicle: Vehicle = {
       ...existing,
+      infoTr: existing.infoTr || normalized.infoTr,
+      infoEn: existing.infoEn || normalized.infoEn,
+      officialUrl: existing.officialUrl || normalized.officialUrl,
       secondaryCategories: mergedCategories.filter((category) => category !== existing.primaryCategory),
       mainImage: nextMainImage,
       galleryImages: nextGallery.length ? nextGallery : [nextMainImage],
@@ -402,7 +471,8 @@ function dedupeVehiclesByModel(vehicles: Vehicle[]): Vehicle[] {
       carouselSpeed: existing.carouselSpeed || normalized.carouselSpeed,
       featured: existing.featured || normalized.featured,
       active: existing.active || normalized.active,
-      variants: nextVariants.length ? nextVariants : existing.variants
+      rentalPackages: nextPackages,
+      variants: []
     };
 
     mergedByKey.set(key, nextVehicle);
@@ -833,3 +903,4 @@ export function useSiteData(): SiteDataContextType {
   }
   return context;
 }
+

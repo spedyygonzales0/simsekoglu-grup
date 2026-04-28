@@ -8,11 +8,11 @@ export function PageHero({ eyebrow, title, description }: PageHeroProps) {
   return (
     <section className="premium-gradient py-16 sm:py-24">
       <div className="container-wide">
-        <p className="mb-4 text-xs uppercase tracking-[0.22em] text-gold-300">{eyebrow}</p>
-        <h1 className="max-w-4xl font-display text-4xl font-semibold leading-tight text-white sm:text-5xl">
+        <p className="mb-4 text-sm font-semibold uppercase tracking-[0.11em] text-gold-300">{eyebrow}</p>
+        <h1 className="page-title max-w-4xl text-white">
           {title}
         </h1>
-        <p className="mt-5 max-w-3xl text-base text-white/75 sm:text-lg">{description}</p>
+        <p className="body-text mt-5 max-w-3xl text-white/80">{description}</p>
       </div>
     </section>
   );

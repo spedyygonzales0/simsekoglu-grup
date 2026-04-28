@@ -20,10 +20,26 @@
 }
 
 body {
-  @apply bg-cloud-50 text-navy-900 antialiased;
+  @apply bg-cloud-50 text-base text-navy-900 antialiased;
+  font-family: Inter, "Segoe UI", Tahoma, sans-serif;
   background-image:
     radial-gradient(circle at 20% 10%, rgba(199, 155, 74, 0.16), transparent 40%),
     radial-gradient(circle at 80% 0%, rgba(17, 42, 78, 0.1), transparent 35%);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: Montserrat, Inter, "Segoe UI", sans-serif;
+  letter-spacing: -0.01em;
+}
+
+p,
+li {
+  line-height: 1.7;
 }
 
 .container-wide {
@@ -44,6 +60,65 @@ body {
 
 .gold-link {
   @apply text-gold-500 transition-colors hover:text-gold-400;
+}
+
+.page-title {
+  @apply font-display text-4xl font-bold leading-tight text-navy-900 sm:text-5xl lg:text-6xl;
+}
+
+.section-title {
+  @apply font-display text-3xl font-bold leading-tight text-navy-900 sm:text-4xl;
+}
+
+.card-title {
+  @apply font-display text-2xl font-semibold leading-tight text-navy-900 sm:text-[1.75rem];
+}
+
+.body-text {
+  @apply text-base leading-relaxed sm:text-[1.0625rem];
+}
+
+.muted-text {
+  @apply text-[0.98rem] leading-relaxed text-navy-900/70;
+}
+
+.admin-label {
+  @apply text-[0.95rem] font-semibold text-navy-900;
+}
+
+.admin-input {
+  @apply w-full rounded-lg border border-navy-900/20 px-4 py-3 text-[0.98rem] leading-6 text-navy-900;
+}
+
+.price-text {
+  @apply text-3xl font-extrabold tracking-tight text-navy-900 sm:text-4xl;
+}
+
+.premium-btn {
+  font-size: 0.98rem;
+  line-height: 1.25rem;
+}
+
+.admin-surface {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.admin-surface table th,
+.admin-surface table td {
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+.admin-surface input,
+.admin-surface select,
+.admin-surface textarea {
+  min-height: 46px;
+  font-size: 0.98rem;
+}
+
+.landing-panel-grid {
+  min-height: calc(100vh - 80px);
 }
 
 @keyframes heroFadeUp {

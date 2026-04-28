@@ -13,8 +13,9 @@ export type VehicleCategory =
   | "hatchback"
   | "van";
 
-export type FuelType = "Benzin" | "Dizel" | "Hibrit" | "Elektrik";
+export type FuelType = "Benzin" | "Dizel" | "Hibrit" | "Elektrik" | "Elektrikli";
 export type TransmissionType = "Otomatik" | "Manuel";
+export type RentalKm = 1000 | 2000 | 3000;
 
 export type VariantAvailabilityStatus = "available" | "limited" | "unavailable";
 export type ProjectStatus = "completed" | "ongoing" | "planned";
@@ -26,28 +27,45 @@ export interface VehicleVariant {
   title: string;
   fuelType: FuelType;
   transmission: TransmissionType;
-  modelYear: number;
+  modelYear?: number;
   monthlyKm: number;
   monthlyPrice: number;
-  deposit: number;
-  availabilityStatus: VariantAvailabilityStatus;
+  deposit?: number;
+  availabilityStatus?: VariantAvailabilityStatus;
   notes?: string;
+}
+
+export interface RentalPackage {
+  id: string;
+  fuelType: Exclude<FuelType, "Elektrik">;
+  transmission: TransmissionType;
+  prices: {
+    1000: number | null;
+    2000: number | null;
+    3000: number | null;
+  };
 }
 
 export interface Vehicle {
   id: string;
   brand: string;
   model: string;
+  modelYearLabel: string;
   slug: string;
   primaryCategory: VehicleCategory;
   secondaryCategories: VehicleCategory[];
+  infoTr: string;
+  infoEn: string;
+  officialUrl: string;
   mainImage: string;
   galleryImages: string[];
   carouselActive?: boolean;
   carouselSpeed?: CarouselSpeed;
   featured: boolean;
   active: boolean;
-  variants: VehicleVariant[];
+  rentalPackages: RentalPackage[];
+  // Legacy field kept for backward compatibility with old local data.
+  variants?: VehicleVariant[];
 }
 
 export interface Project {

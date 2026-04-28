@@ -18,24 +18,24 @@ export function Footer() {
       <div className="container-wide py-16">
         <div className="grid gap-10 sm:grid-cols-2 xl:grid-cols-4">
           <section className="space-y-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-gold-300">Şimşekoğlu Grup</p>
-            <h3 className="font-display text-2xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.1em] text-gold-300">Şimşekoğlu Grup</p>
+            <h3 className="section-title text-white">
               {locale === "tr" ? "Kurumsal Güç, Sürdürülebilir Çözüm" : "Corporate Power, Sustainable Solutions"}
             </h3>
-            <p className="text-sm leading-relaxed text-white/70">
+            <p className="body-text text-white/78">
               {locale === "tr"
                 ? "İnşaat, mimarlık ve filo alanlarında uzun vadeli iş ortaklıkları için planlı ve güvenilir hizmet sunuyoruz."
                 : "We deliver planned and reliable services in construction, architecture, and fleet solutions for long-term partnerships."}
             </p>
           </section>
 
-          <section className="space-y-3 text-sm">
-            <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-gold-300">
+          <section className="space-y-3">
+            <h4 className="text-sm font-semibold uppercase tracking-[0.1em] text-gold-300">
               {locale === "tr" ? "İletişim Bilgileri" : "Contact Information"}
             </h4>
-            <p className="text-white/80">{content.contact.phone}</p>
-            <p className="text-white/80">{content.contact.email}</p>
-            <p className="text-white/65">{locale === "tr" ? content.contact.addressTr : content.contact.addressEn}</p>
+            <p className="body-text text-white/85">{content.contact.phone}</p>
+            <p className="body-text text-white/85">{content.contact.email}</p>
+            <p className="body-text text-white/70">{locale === "tr" ? content.contact.addressTr : content.contact.addressEn}</p>
             <a
               className="premium-btn inline-flex text-white/80 hover:text-gold-300"
               href={buildWhatsAppUrl(
@@ -49,8 +49,8 @@ export function Footer() {
             </a>
           </section>
 
-          <section className="space-y-3 text-sm">
-            <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-gold-300">
+          <section className="space-y-3">
+            <h4 className="text-sm font-semibold uppercase tracking-[0.1em] text-gold-300">
               {locale === "tr" ? "Menü" : "Menu"}
             </h4>
             <div className="grid gap-2">
@@ -78,9 +78,9 @@ export function Footer() {
             </div>
           </section>
 
-          <section className="space-y-3 text-sm">
-            <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-gold-300">Instagram</h4>
-            <p className="text-white/70">
+          <section className="space-y-3">
+            <h4 className="text-sm font-semibold uppercase tracking-[0.1em] text-gold-300">Instagram</h4>
+            <p className="body-text text-white/75">
               {locale === "tr"
                 ? "Güncel proje ve filo içeriklerimizi Instagram hesabımızdan takip edebilirsiniz."
                 : "Follow our latest project and fleet content on Instagram."}
@@ -98,7 +98,7 @@ export function Footer() {
 
         <div className="mt-10 border-t border-white/10 pt-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-white/60">
+            <p className="text-sm text-white/65">
               © {new Date().getFullYear()} Şimşekoğlu Grup. {locale === "tr" ? "Tüm hakları saklıdır." : "All rights reserved."}
             </p>
             <MotionModeToggle />
