@@ -12,7 +12,7 @@ export function SectionTitle({ eyebrow, title, description, rightSlot }: Section
     <div className="mb-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
       <div className="max-w-2xl space-y-3">
         {eyebrow && (
-          <p className="text-sm font-semibold uppercase tracking-[0.1em] text-gold-500">
+          <p className="small-note font-semibold tracking-[0.08em] text-gold-600">
             {eyebrow}
           </p>
         )}

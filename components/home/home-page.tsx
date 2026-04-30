@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSiteData } from "@/components/providers/site-data-provider";
+import { architectureFolderProjectManifest } from "@/lib/data/architecture-folder-manifest";
+import { constructionProjectMediaManifest } from "@/lib/data/construction-media-manifest";
 
 type LandingPanelId = "construction" | "architecture" | "fleet";
 
@@ -58,11 +60,13 @@ function LandingPanelCard({
         fill
         priority={panel.id === "construction"}
         sizes="(max-width: 1024px) 100vw, 33vw"
-        className={`object-cover transition-transform duration-700 ease-out ${isActive ? "scale-[1.08]" : "scale-100"}`}
+        className={`object-contain bg-[#071426] transition-transform duration-700 ease-out ${
+          isActive ? "scale-[1.03]" : "scale-100"
+        }`}
         onError={() => setImageSrc(panel.fallback)}
       />
 
-      <div className={`absolute inset-0 transition-colors duration-700 ${isActive ? "bg-navy-900/50" : "bg-navy-900/68"}`} />
+      <div className={`absolute inset-0 transition-colors duration-700 ${isActive ? "bg-navy-900/58" : "bg-navy-900/74"}`} />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(216,177,106,0.22),transparent_45%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(125deg,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0.03)_34%,rgba(255,255,255,0)_62%)] opacity-55 transition-opacity duration-700 group-hover:opacity-80" />
       <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-16 bg-gradient-to-r from-black/65 via-black/30 to-transparent lg:block" />
@@ -78,7 +82,7 @@ function LandingPanelCard({
 
       <div className="relative z-10 flex h-full flex-col justify-end px-6 pb-7 pt-10 sm:px-8 sm:pb-9">
         <p
-          className={`mb-4 max-w-md text-sm leading-relaxed text-white/90 transition-all duration-500 lg:translate-y-2 lg:opacity-0 ${
+          className={`mb-4 max-w-md text-sm leading-relaxed text-white/95 drop-shadow-[0_6px_14px_rgba(0,0,0,0.6)] transition-all duration-500 lg:translate-y-2 lg:opacity-0 ${
             isActive ? "lg:translate-y-0 lg:opacity-100" : ""
           }`}
         >
@@ -93,9 +97,9 @@ function LandingPanelCard({
         </h2>
 
         <span
-          className={`premium-btn mt-5 inline-flex w-fit rounded-full border border-gold-400/90 bg-transparent px-6 py-3 text-base font-semibold text-gold-300 transition-all duration-500 ${
+          className={`premium-btn mt-5 inline-flex w-fit rounded-full border border-white bg-white px-6 py-3 text-base font-semibold text-black shadow-[0_10px_24px_-14px_rgba(0,0,0,0.65)] transition-all duration-500 ${
             isActive ? "opacity-100" : "opacity-90"
-          } group-hover:bg-gold-500 group-hover:text-navy-900`}
+          } group-hover:border-gold-300 group-hover:bg-gold-500 group-hover:text-black`}
         >
           {locale === "tr" ? panel.buttonTr : panel.buttonEn}
         </span>
@@ -108,21 +112,21 @@ export function HomePage() {
   const { locale } = useSiteData();
   const [hoveredPanel, setHoveredPanel] = useState<LandingPanelId | null>(null);
   const constructionImages = useMemo(
-    () => [
-      "/images/construction/projects/KNT-001/photos/1.JPG",
-      "/images/construction/projects/KNT-001/photos/2.JPG",
-      "/images/construction/projects/KNT-002/photos/1.JPG",
-      "/images/construction/projects/KNT-002/photos/2.JPG",
-      "/images/construction/projects/KNT-003/photos/1.JPG",
-      "/images/construction/projects/KNT-004/photos/1.JPG",
-      "/images/construction/projects/KNT-005/photos/1.JPG",
-      "/images/construction/projects/KNT-006/photos/1.JPG",
-      "/images/construction/projects/FBK-001/photos/1.JPG",
-      "/images/construction/projects/FBK-002/photos/1.JPG"
-    ],
+    () =>
+      constructionProjectMediaManifest
+        .map((item) => item.photos?.[0])
+        .filter(Boolean),
+    []
+  );
+  const architectureImages = useMemo(
+    () =>
+      architectureFolderProjectManifest
+        .map((item) => item.coverImageUrl)
+        .filter(Boolean),
     []
   );
   const [constructionImageIndex, setConstructionImageIndex] = useState(0);
+  const [architectureImageIndex, setArchitectureImageIndex] = useState(0);
 
   useEffect(() => {
     if (constructionImages.length <= 1) {
@@ -131,10 +135,22 @@ export function HomePage() {
 
     const timer = window.setInterval(() => {
       setConstructionImageIndex((current) => (current + 1) % constructionImages.length);
-    }, 4200);
+    }, 2200);
 
     return () => window.clearInterval(timer);
   }, [constructionImages]);
+
+  useEffect(() => {
+    if (architectureImages.length <= 1) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setArchitectureImageIndex((current) => (current + 1) % architectureImages.length);
+    }, 2400);
+
+    return () => window.clearInterval(timer);
+  }, [architectureImages]);
 
   const panels: LandingPanelItem[] = useMemo(
     () => [
@@ -159,7 +175,7 @@ export function HomePage() {
         buttonEn: "Explore Design",
         subtitleTr: "Konseptten uygulama detayına uzanan kurumsal mimari yaklaşım.",
         subtitleEn: "Corporate architectural approach from concept to implementation details.",
-        image: "/images/architecture/project-placeholder-1.svg",
+        image: architectureImages[architectureImageIndex] ?? "/images/architecture/project-placeholder-1.svg",
         fallback: "/images/general/about-placeholder.svg"
       },
       {
@@ -171,11 +187,11 @@ export function HomePage() {
         buttonEn: "Browse Vehicles",
         subtitleTr: "Kurumsal operasyonlara uygun güçlü, seçkin ve sürdürülebilir araç portföyü.",
         subtitleEn: "Strong, premium, and sustainable vehicle portfolio for corporate operations.",
-        image: "/images/fleet/filo-ana.png",
+        image: "/images/general/ana-ekran.jpeg",
         fallback: "/images/fleet/vehicle-placeholder.svg"
       }
     ],
-    [constructionImageIndex, constructionImages]
+    [architectureImageIndex, architectureImages, constructionImageIndex, constructionImages]
   );
 
   return (

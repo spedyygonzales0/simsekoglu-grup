@@ -2,20 +2,22 @@
 
 import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ArchitectureProjectsManager } from "@/components/admin/architecture-projects-manager";
+import { ConstructionContentManager } from "@/components/admin/construction-content-manager";
+import { FleetInformationManager } from "@/components/admin/fleet-information-manager";
+import { MediaUploader } from "@/components/admin/media-uploader";
 import { useSiteData } from "@/components/providers/site-data-provider";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { constructionProjectMediaManifest } from "@/lib/data/construction-media-manifest";
+import { defaultFleetInformation } from "@/lib/data/fleet-information-default";
 import { currencyTl, requestStatusLabel, serviceTypeLabel, vehicleCategoryLabel } from "@/lib/i18n";
 import {
   AboutContent,
-  ArchitectureContent,
   CarouselSpeed,
   ConstructionContent,
   ContactInfo,
   FuelType,
-  HomeContent,
-  Project,
-  ProjectCategory,
-  ProjectStatus,
+  FleetInformationContent,
   QuoteRequest,
   QuoteRequestStatus,
   RentalPackage,
@@ -29,10 +31,10 @@ import {
 type AdminTab =
   | "dashboard"
   | "vehicles"
-  | "projects"
-  | "architecture-content"
+  | "architecture-projects"
   | "construction-content"
   | "homepage-content"
+  | "fleet-information"
   | "contact-settings"
   | "media-library"
   | "requests"
@@ -44,10 +46,10 @@ type VehicleStatusFilter = "all" | "active" | "passive";
 const tabs: Array<{ id: AdminTab; label: string }> = [
   { id: "dashboard", label: "Panel" },
   { id: "vehicles", label: "Araçlar" },
-  { id: "projects", label: "Projeler" },
-  { id: "architecture-content", label: "Mimarlık İçerikleri" },
+  { id: "architecture-projects", label: "Mimarlık Projeleri" },
   { id: "construction-content", label: "İnşaat İçerikleri" },
   { id: "homepage-content", label: "Ana Sayfa İçeriği" },
+  { id: "fleet-information", label: "Filo Bilgilendirme Ayarları" },
   { id: "contact-settings", label: "İletişim Ayarları" },
   { id: "media-library", label: "Medya Kütüphanesi" },
   { id: "requests", label: "Teklif Talepleri" },
@@ -55,8 +57,6 @@ const tabs: Array<{ id: AdminTab; label: string }> = [
 ];
 
 const requestStatusOptions: QuoteRequestStatus[] = ["pending", "contacted", "closed"];
-const projectStatusOptions: ProjectStatus[] = ["completed", "ongoing", "planned"];
-const projectCategoryOptions: ProjectCategory[] = ["construction", "architecture", "fleet"];
 const vehicleCategoryOptions: VehicleCategory[] = [
   "suv",
   "electric",
@@ -72,6 +72,9 @@ const ELECTRIC_FUEL: FuelType = "Elektrikli";
 const transmissionOptions: TransmissionType[] = ["Otomatik", "Manuel"];
 const carouselSpeedOptions: CarouselSpeed[] = ["slow", "normal", "fast"];
 const KM_VALUES: RentalKm[] = [1000, 2000, 3000];
+const ADMIN_LOGIN_GUARD_KEY = "sg_admin_login_guard";
+const ADMIN_MAX_LOGIN_ATTEMPTS = 5;
+const ADMIN_LOCK_DURATION_MS = 3 * 60 * 1000;
 
 const VEHICLE_PLACEHOLDER_IMAGE = "/images/fleet/vehicle-placeholder.svg";
 
@@ -91,9 +94,12 @@ const createDefaultVehicleForm = (): Omit<Vehicle, "id"> => ({
   secondaryCategories: [],
   infoTr: "",
   infoEn: "",
+  servicesText: "",
+  termsText: "",
+  userRulesText: "",
   officialUrl: "",
   mainImage: VEHICLE_PLACEHOLDER_IMAGE,
-  galleryImages: [VEHICLE_PLACEHOLDER_IMAGE],
+  galleryImages: [],
   carouselActive: true,
   carouselSpeed: "normal",
   featured: false,
@@ -101,27 +107,6 @@ const createDefaultVehicleForm = (): Omit<Vehicle, "id"> => ({
   rentalPackages: [],
   variants: []
 });
-
-const defaultProjectForm: Omit<Project, "id"> = {
-  titleTr: "",
-  titleEn: "",
-  summaryTr: "",
-  summaryEn: "",
-  descriptionTr: "",
-  descriptionEn: "",
-  locationTr: "İstanbul",
-  locationEn: "Istanbul",
-  date: new Date().toISOString().slice(0, 7),
-  status: "planned",
-  category: "construction",
-  featuredImage: "/images/construction/project-placeholder-1.svg",
-  galleryImages: ["/images/construction/project-placeholder-1.svg"],
-  carouselActive: true,
-  carouselSpeed: "normal",
-  imageUrl: "/images/construction/project-placeholder-1.svg",
-  videoUrl: "/images/construction/video-placeholder.svg",
-  featured: false
-};
 
 function SectionCard({
   title,
@@ -207,9 +192,11 @@ function carouselSpeedLabelTr(speed: CarouselSpeed): string {
 }
 
 function toVehicleForm(vehicle: Vehicle): Omit<Vehicle, "id"> {
-  const galleryImages = Array.from(
+  const uniqueImages = Array.from(
     new Set([vehicle.mainImage || VEHICLE_PLACEHOLDER_IMAGE, ...(vehicle.galleryImages || [])].filter(Boolean))
   );
+  const galleryImages =
+    uniqueImages.length === 1 && uniqueImages[0] === VEHICLE_PLACEHOLDER_IMAGE ? [] : uniqueImages;
 
   return {
     brand: vehicle.brand,
@@ -220,6 +207,9 @@ function toVehicleForm(vehicle: Vehicle): Omit<Vehicle, "id"> {
     secondaryCategories: vehicle.secondaryCategories,
     infoTr: vehicle.infoTr || "",
     infoEn: vehicle.infoEn || "",
+    servicesText: vehicle.servicesText || "",
+    termsText: vehicle.termsText || "",
+    userRulesText: vehicle.userRulesText || "",
     officialUrl: vehicle.officialUrl || "",
     mainImage: vehicle.mainImage || VEHICLE_PLACEHOLDER_IMAGE,
     galleryImages,
@@ -251,14 +241,11 @@ export default function AdminPage() {
     addVehicle,
     updateVehicle,
     deleteVehicle,
-    addProject,
-    updateProject,
-    deleteProject,
     updateContact,
-    updateHome,
     updateAbout,
     updateConstruction,
-    updateArchitecture,
+    updateFleetInformation,
+    updateProjectCardTexts,
     updateSettings,
     updateMediaLibrary,
     quoteRequests,
@@ -267,9 +254,13 @@ export default function AdminPage() {
   } = useSiteData();
 
   const [tab, setTab] = useState<AdminTab>("dashboard");
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin123");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [loginPending, setLoginPending] = useState(false);
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [loginLockedUntil, setLoginLockedUntil] = useState<number | null>(null);
+  const isLoginLocked = Boolean(loginLockedUntil && Date.now() < loginLockedUntil);
 
   const [vehicleForm, setVehicleForm] = useState<Omit<Vehicle, "id">>(createDefaultVehicleForm);
   const [vehicleWizardStep, setVehicleWizardStep] = useState<VehicleWizardStep>(1);
@@ -280,15 +271,16 @@ export default function AdminPage() {
   const [showAdvancedVehicleTools, setShowAdvancedVehicleTools] = useState(false);
   const [vehicleEditId, setVehicleEditId] = useState<string | null>(null);
   const [vehiclePackageIndex, setVehiclePackageIndex] = useState(0);
-  const [vehicleMediaPathInput, setVehicleMediaPathInput] = useState("");
-  const [projectForm, setProjectForm] = useState<Omit<Project, "id">>(defaultProjectForm);
-  const [projectEditId, setProjectEditId] = useState<string | null>(null);
-  const [projectMediaPathInput, setProjectMediaPathInput] = useState("");
 
-  const [homeForm, setHomeForm] = useState<HomeContent>(content.home);
   const [aboutForm, setAboutForm] = useState<AboutContent>(content.about);
   const [constructionForm, setConstructionForm] = useState<ConstructionContent>(content.construction);
-  const [architectureForm, setArchitectureForm] = useState<ArchitectureContent>(content.architecture);
+  const [fleetInformationForm, setFleetInformationForm] = useState<FleetInformationContent>({
+    ...defaultFleetInformation,
+    ...content.fleetInformation,
+    includedServices: content.fleetInformation?.includedServices?.length
+      ? content.fleetInformation.includedServices
+      : defaultFleetInformation.includedServices
+  });
   const [contactForm, setContactForm] = useState<ContactInfo>(content.contact);
   const [settingsForm, setSettingsForm] = useState<SettingsContent>(content.settings);
   const [mediaText, setMediaText] = useState(content.mediaLibrary.join("\n"));
@@ -296,14 +288,61 @@ export default function AdminPage() {
   const [saved, setSaved] = useState("");
 
   useEffect(() => {
-    setHomeForm(content.home);
     setAboutForm(content.about);
     setConstructionForm(content.construction);
-    setArchitectureForm(content.architecture);
+    setFleetInformationForm({
+      ...defaultFleetInformation,
+      ...content.fleetInformation,
+      includedServices: content.fleetInformation?.includedServices?.length
+        ? content.fleetInformation.includedServices
+        : defaultFleetInformation.includedServices
+    });
     setContactForm(content.contact);
     setSettingsForm(content.settings);
     setMediaText(content.mediaLibrary.join("\n"));
   }, [content]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const rawGuard = window.localStorage.getItem(ADMIN_LOGIN_GUARD_KEY);
+      if (!rawGuard) return;
+      const parsed = JSON.parse(rawGuard) as { attempts?: number; lockedUntil?: number };
+      if (typeof parsed.attempts === "number") setLoginAttempts(parsed.attempts);
+      if (typeof parsed.lockedUntil === "number") setLoginLockedUntil(parsed.lockedUntil);
+    } catch {
+      // ignore invalid local data
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      ADMIN_LOGIN_GUARD_KEY,
+      JSON.stringify({
+        attempts: loginAttempts,
+        lockedUntil: loginLockedUntil
+      })
+    );
+  }, [loginAttempts, loginLockedUntil]);
+
+  useEffect(() => {
+    if (!loginLockedUntil) return;
+    const remaining = loginLockedUntil - Date.now();
+    if (remaining <= 0) {
+      setLoginLockedUntil(null);
+      setLoginAttempts(0);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setLoginLockedUntil(null);
+      setLoginAttempts(0);
+      setLoginError("");
+    }, remaining + 250);
+
+    return () => window.clearTimeout(timer);
+  }, [loginLockedUntil]);
 
   const summary = useMemo(
     () => ({
@@ -318,7 +357,7 @@ export default function AdminPage() {
   const setupChecklist = useMemo(() => {
     const hasVehicles = content.vehicles.length >= 5;
     const hasProjects = content.projects.length >= 3;
-    const hasWhatsapp = Boolean(content.contact.whatsapp?.trim());
+    const hasWhatsapp = Boolean(content.contact.whatsappGeneral?.trim() || content.contact.whatsapp?.trim());
     const hasInstagram = Boolean(content.contact.social.instagram?.trim());
     const hasContactBasics = Boolean(content.contact.phone?.trim() && content.contact.email?.trim());
     return [
@@ -343,7 +382,12 @@ export default function AdminPage() {
         done: hasContactBasics
       }
     ];
-  }, [content.contact.email, content.contact.phone, content.contact.social.instagram, content.contact.whatsapp, content.projects.length, content.vehicles.length]);
+  }, [content.contact.email, content.contact.phone, content.contact.social.instagram, content.contact.whatsapp, content.contact.whatsappGeneral, content.projects.length, content.vehicles.length]);
+
+  const constructionProjectIds = useMemo(
+    () => constructionProjectMediaManifest.map((item) => item.projectId),
+    []
+  );
 
   const setupCompleted = setupChecklist.filter((item) => item.done).length;
 
@@ -464,102 +508,23 @@ export default function AdminPage() {
     }
   }, [vehicleForm.primaryCategory]);
 
-  const cleanMediaPath = (value: string) => value.trim();
+  const vehicleMediaFolder = useMemo(() => {
+    const slug = buildSlug(vehicleForm.brand, vehicleForm.model);
+    return slug || "genel-arac";
+  }, [vehicleForm.brand, vehicleForm.model]);
 
-  const addVehicleGalleryImage = () => {
-    const path = cleanMediaPath(vehicleMediaPathInput);
-    if (!path) return;
+  const onVehicleGalleryChange = (urls: string[]) => {
+    const sanitizedUrls = Array.from(new Set((urls || []).map((item) => item.trim()).filter(Boolean)));
     setVehicleForm((prev) => {
-      const nextGallery = Array.from(new Set([...(prev.galleryImages || []), path]));
-      return {
-        ...prev,
-        galleryImages: nextGallery,
-        mainImage: prev.mainImage || path
-      };
-    });
-    setVehicleMediaPathInput("");
-  };
-
-  const setVehicleMainImage = (path: string) => {
-    setVehicleForm((prev) => ({
-      ...prev,
-      mainImage: path,
-      galleryImages: Array.from(new Set([path, ...(prev.galleryImages || [])]))
-    }));
-  };
-
-  const removeVehicleGalleryImage = (path: string) => {
-    setVehicleForm((prev) => {
-      const nextGallery = (prev.galleryImages || []).filter((item) => item !== path);
       const nextMainImage =
-        prev.mainImage === path ? nextGallery[0] || VEHICLE_PLACEHOLDER_IMAGE : prev.mainImage;
+        sanitizedUrls.find((item) => item === prev.mainImage) ||
+        sanitizedUrls[0] ||
+        VEHICLE_PLACEHOLDER_IMAGE;
       return {
         ...prev,
         mainImage: nextMainImage,
-        galleryImages: nextGallery.length ? nextGallery : [nextMainImage]
-      };
-    });
-  };
-
-  const moveVehicleGalleryImage = (index: number, direction: "up" | "down") => {
-    setVehicleForm((prev) => {
-      const current = [...(prev.galleryImages || [])];
-      const target = direction === "up" ? index - 1 : index + 1;
-      if (target < 0 || target >= current.length) return prev;
-      [current[index], current[target]] = [current[target], current[index]];
-      return {
-        ...prev,
-        galleryImages: current
-      };
-    });
-  };
-
-  const addProjectGalleryImage = () => {
-    const path = cleanMediaPath(projectMediaPathInput);
-    if (!path) return;
-    setProjectForm((prev) => {
-      const nextGallery = Array.from(new Set([...(prev.galleryImages || []), path]));
-      return {
-        ...prev,
-        featuredImage: prev.featuredImage || path,
-        imageUrl: prev.imageUrl || path,
-        galleryImages: nextGallery
-      };
-    });
-    setProjectMediaPathInput("");
-  };
-
-  const setProjectFeaturedImage = (path: string) => {
-    setProjectForm((prev) => ({
-      ...prev,
-      featuredImage: path,
-      imageUrl: path,
-      galleryImages: Array.from(new Set([path, ...(prev.galleryImages || [])]))
-    }));
-  };
-
-  const removeProjectGalleryImage = (path: string) => {
-    setProjectForm((prev) => {
-      const nextGallery = (prev.galleryImages || []).filter((item) => item !== path);
-      const fallbackImage = nextGallery[0] || prev.imageUrl || "/images/construction/project-placeholder-1.svg";
-      return {
-        ...prev,
-        featuredImage: prev.featuredImage === path ? fallbackImage : prev.featuredImage,
-        imageUrl: prev.imageUrl === path ? fallbackImage : prev.imageUrl,
-        galleryImages: nextGallery.length ? nextGallery : [fallbackImage]
-      };
-    });
-  };
-
-  const moveProjectGalleryImage = (index: number, direction: "up" | "down") => {
-    setProjectForm((prev) => {
-      const current = [...(prev.galleryImages || [])];
-      const target = direction === "up" ? index - 1 : index + 1;
-      if (target < 0 || target >= current.length) return prev;
-      [current[index], current[target]] = [current[target], current[index]];
-      return {
-        ...prev,
-        galleryImages: current
+        galleryImages: sanitizedUrls,
+        carouselActive: sanitizedUrls.length > 1
       };
     });
   };
@@ -569,20 +534,38 @@ export default function AdminPage() {
     setTimeout(() => setSaved(""), 1500);
   };
 
-  const onAdminLogin = (event: FormEvent<HTMLFormElement>) => {
+  const onAdminLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const ok = loginAdmin(username, password);
-    if (!ok) {
-      setLoginError("Kullanıcı adı veya şifre hatalı.");
+    const now = Date.now();
+    if (loginLockedUntil && now < loginLockedUntil) {
+      const minutesLeft = Math.max(1, Math.ceil((loginLockedUntil - now) / 60000));
+      setLoginError(`Çok fazla deneme yapıldı. Lütfen ${minutesLeft} dakika sonra tekrar deneyin.`);
       return;
     }
+    setLoginPending(true);
+    const result = await loginAdmin(username, password);
+    setLoginPending(false);
+    if (!result.ok) {
+      const nextAttempts = loginAttempts + 1;
+      setLoginAttempts(nextAttempts);
+      if (nextAttempts >= ADMIN_MAX_LOGIN_ATTEMPTS) {
+        const lockUntil = Date.now() + ADMIN_LOCK_DURATION_MS;
+        setLoginLockedUntil(lockUntil);
+        setLoginError("Çok fazla hatalı giriş yapıldı. Lütfen 3 dakika sonra tekrar deneyin.");
+        return;
+      }
+      setLoginError(result.message || "Kullanıcı adı veya şifre hatalı.");
+      return;
+    }
+    setLoginAttempts(0);
+    setLoginLockedUntil(null);
     setLoginError("");
   };
 
   const onVehicleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const normalizedPackages = (vehicleForm.rentalPackages || []).map((pkg, index) => ({
+    const normalizedPackages = (vehicleForm.rentalPackages || []).map((pkg) => ({
       id: pkg.id || `pkg-${Math.random().toString(36).slice(2, 9)}`,
       fuelType: pkg.fuelType as RentalPackage["fuelType"],
       transmission: pkg.transmission,
@@ -687,7 +670,6 @@ export default function AdminPage() {
 
       setVehicleEditId(null);
       setVehicleForm(createDefaultVehicleForm());
-      setVehicleMediaPathInput("");
       setVehiclePackageIndex(0);
       setVehicleWizardStep(1);
       flashSaved(
@@ -703,7 +685,6 @@ export default function AdminPage() {
 
     setVehicleEditId(null);
     setVehicleForm(createDefaultVehicleForm());
-    setVehicleMediaPathInput("");
     setVehiclePackageIndex(0);
     setVehicleWizardStep(1);
     flashSaved(vehicleEditId ? "Araç güncellendi." : "Araç eklendi.");
@@ -720,40 +701,8 @@ export default function AdminPage() {
   const resetVehicleForm = () => {
     setVehicleEditId(null);
     setVehicleForm(createDefaultVehicleForm());
-    setVehicleMediaPathInput("");
     setVehiclePackageIndex(0);
     setVehicleWizardStep(1);
-  };
-
-  const onProjectSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const fallbackImage =
-      projectForm.featuredImage ||
-      projectForm.imageUrl ||
-      (projectForm.category === "architecture"
-        ? "/images/architecture/project-placeholder-1.svg"
-        : projectForm.category === "fleet"
-          ? "/images/fleet/vehicle-placeholder.svg"
-          : "/images/construction/project-placeholder-1.svg");
-
-    const normalizedGallery = Array.from(
-      new Set([fallbackImage, ...(projectForm.galleryImages || [])].filter(Boolean))
-    );
-
-    const payload: Omit<Project, "id"> = {
-      ...projectForm,
-      featuredImage: fallbackImage,
-      imageUrl: fallbackImage,
-      galleryImages: normalizedGallery,
-      carouselActive: projectForm.carouselActive ?? normalizedGallery.length > 1,
-      carouselSpeed: projectForm.carouselSpeed ?? "normal"
-    };
-
-    if (projectEditId) updateProject(projectEditId, payload);
-    else addProject(payload);
-    setProjectEditId(null);
-    setProjectForm(defaultProjectForm);
-    setProjectMediaPathInput("");
   };
 
   if (!isAdminAuthenticated) {
@@ -761,15 +710,15 @@ export default function AdminPage() {
       <main className="admin-surface flex min-h-screen items-center justify-center bg-cloud-100 p-6">
         <form onSubmit={onAdminLogin} className="w-full max-w-md rounded-2xl bg-white p-9 shadow-soft">
           <h1 className="font-display text-3xl text-navy-900">Yönetim Girişi</h1>
-          <p className="mt-2 body-text text-navy-900/70">
-            Geçici giriş bilgileri: <strong>admin / admin123</strong>
-          </p>
+          <p className="mt-2 body-text text-navy-900/70">Yalnızca yetkili yönetici girişi yapılabilir.</p>
           <div className="mt-7 space-y-5">
             <InputField label="Kullanıcı Adı">
               <input
                 className="admin-input"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
+                disabled={isLoginLocked}
+                autoComplete="username"
               />
             </InputField>
             <InputField label="Şifre">
@@ -778,15 +727,23 @@ export default function AdminPage() {
                 className="admin-input"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                disabled={isLoginLocked}
+                autoComplete="current-password"
               />
             </InputField>
           </div>
+          {isLoginLocked ? (
+            <p className="mt-3 text-base text-amber-700">
+              Güvenlik nedeniyle giriş geçici olarak kilitlendi.
+            </p>
+          ) : null}
           {loginError ? <p className="mt-3 text-base text-red-600">{loginError}</p> : null}
           <button
             type="submit"
-            className="mt-7 w-full rounded-lg bg-navy-900 px-4 py-3 text-base font-semibold text-white transition hover:bg-navy-700"
+            disabled={loginPending || isLoginLocked}
+            className="mt-7 w-full rounded-lg bg-navy-900 px-4 py-3 text-base font-semibold text-white transition hover:bg-navy-700 disabled:cursor-not-allowed disabled:bg-slate-500"
           >
-            Giriş Yap
+            {loginPending ? "Giriş yapılıyor..." : "Giriş Yap"}
           </button>
         </form>
       </main>
@@ -798,9 +755,9 @@ export default function AdminPage() {
       <div className="flex min-h-screen">
         <aside className="hidden w-80 flex-col bg-navy-900 text-white md:flex">
           <div className="border-b border-white/10 px-6 py-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.1em] text-gold-300">Yönetim Paneli</p>
-            <h1 className="mt-3 font-display text-2xl">Şimşekoğlu Grup</h1>
-            <p className="mt-2 text-sm text-white/70">Kurumsal İçerik Yönetimi</p>
+            <p className="text-base font-semibold uppercase tracking-[0.1em] text-gold-300">Yönetim Paneli</p>
+            <h1 className="mt-3 font-display text-[2rem] leading-tight text-white">Şimşekoğlu Grup</h1>
+            <p className="mt-2 text-[1.02rem] font-medium text-white/85">Kurumsal İçerik Yönetimi</p>
           </div>
           <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
             {tabs.map((item) => (
@@ -808,9 +765,9 @@ export default function AdminPage() {
                 key={item.id}
                 type="button"
                 onClick={() => setTab(item.id)}
-                className={`w-full rounded-xl px-4 py-3.5 text-left text-base font-semibold transition ${
-                  tab === item.id ? "bg-gold-500 text-navy-900" : "text-white/85 hover:bg-white/10"
-                }`}
+                  className={`w-full rounded-xl px-4 py-3.5 text-left text-[1.04rem] font-semibold transition ${
+                    tab === item.id ? "bg-gold-500 text-navy-900" : "text-white hover:bg-white/10"
+                  }`}
               >
                 {item.label}
               </button>
@@ -828,18 +785,30 @@ export default function AdminPage() {
         </aside>
 
         <section className="flex-1 p-4 md:p-8">
-          <div className="mb-4 md:hidden">
-            <select
-              value={tab}
-              onChange={(event) => setTab(event.target.value as AdminTab)}
-              className="admin-input rounded-xl font-semibold"
-            >
-              {tabs.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+          <div className="mb-4 space-y-3 md:hidden">
+            <div className="rounded-xl border border-navy-900/10 bg-white p-3 shadow-sm">
+              <p className="text-sm font-semibold text-navy-900">Yönetim Menüsü</p>
+              <div className="mt-2 flex gap-2">
+                <select
+                  value={tab}
+                  onChange={(event) => setTab(event.target.value as AdminTab)}
+                  className="admin-input rounded-xl font-semibold"
+                >
+                  {tabs.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={logoutAdmin}
+                  className="shrink-0 rounded-xl border border-navy-900/20 px-4 py-3 text-sm font-semibold text-navy-900"
+                >
+                  Çıkış
+                </button>
+              </div>
+            </div>
           </div>
 
           {saved ? (
@@ -852,15 +821,15 @@ export default function AdminPage() {
             <div className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-2xl border border-navy-900/10 bg-white p-5 shadow-sm">
-                  <p className="text-base text-navy-900/65">Aktif Araç</p>
+                    <p className="text-[1.02rem] font-medium text-navy-900/75">Aktif Araç</p>
                   <p className="mt-2 font-display text-3xl text-navy-900">{summary.activeVehicles}</p>
                 </div>
                 <div className="rounded-2xl border border-navy-900/10 bg-white p-5 shadow-sm">
-                  <p className="text-base text-navy-900/65">Öne Çıkan Araç</p>
+                    <p className="text-[1.02rem] font-medium text-navy-900/75">Öne Çıkan Araç</p>
                   <p className="mt-2 font-display text-3xl text-navy-900">{summary.featuredVehicles}</p>
                 </div>
                 <div className="rounded-2xl border border-navy-900/10 bg-white p-5 shadow-sm">
-                  <p className="text-base text-navy-900/65">Toplam Proje</p>
+                    <p className="text-[1.02rem] font-medium text-navy-900/75">Toplam Proje</p>
                   <p className="mt-2 font-display text-3xl text-navy-900">{summary.totalProjects}</p>
                 </div>
                 <button
@@ -868,7 +837,7 @@ export default function AdminPage() {
                   onClick={() => setTab("requests")}
                   className="rounded-2xl border border-navy-900/10 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-gold-500/45 hover:shadow-md"
                 >
-                  <p className="text-base text-navy-900/65">Bekleyen Talep</p>
+                  <p className="text-[1.02rem] font-medium text-navy-900/75">Bekleyen Talep</p>
                   <p className="mt-2 font-display text-3xl text-navy-900">{summary.pendingRequests}</p>
                   <p className="mt-2 text-sm font-semibold tracking-[0.03em] text-gold-600">
                     Teklif Taleplerine Git
@@ -1065,20 +1034,9 @@ export default function AdminPage() {
                           placeholder="Short corporate vehicle description..."
                         />
                       </InputField>
-                      <div className="md:col-span-2">
-                        <InputField label="Resmi Site Linki (Opsiyonel)">
-                          <input
-                            value={vehicleForm.officialUrl}
-                            onChange={(event) =>
-                              setVehicleForm((prev) => ({
-                                ...prev,
-                                officialUrl: event.target.value
-                              }))
-                            }
-                            className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                            placeholder="https://..."
-                          />
-                        </InputField>
+                      <div className="md:col-span-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                        Kasko ayrıcalıkları ve “Neden Şimşekoğlu Filo?” içerikleri araç bazlı değil, ortak olarak
+                        <strong> Filo Bilgilendirme Ayarları</strong> bölümünden yönetilir.
                       </div>
                       {duplicateVehicleCandidate ? (
                         <div className="md:col-span-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -1286,85 +1244,38 @@ export default function AdminPage() {
                     <div className="space-y-4">
                       <div className="rounded-2xl border border-navy-900/10 bg-cloud-50 p-5">
                         <p className="text-sm font-semibold text-navy-900">
-                          Görseller hazır olduğunda buraya görsel yolları eklenecek.
+                          Görselleri sürükleyip bırakarak yükleyebilirsiniz. Kaydet dediğinizde araçla birlikte anında yayınlanır.
                         </p>
-                        <p className="mt-1 text-sm text-navy-900/65">
-                          Şimdilik yükleme yerine görsel/video yollarını metin olarak ekleyebilirsiniz.
+                        <p className="mt-1 text-xs text-navy-900/60">
+                          Depolama klasörü: <strong>fleet/{vehicleMediaFolder}</strong>
                         </p>
-                        <p className="mt-1 text-xs text-navy-900/55">Görsel hazır değilse boş bırakabilirsiniz.</p>
 
-                        <div className="mt-4 grid gap-4 md:grid-cols-2">
-                          <InputField label="Ana Görsel Yolu">
-                            <input
-                              value={vehicleForm.mainImage}
-                              onChange={(event) => setVehicleMainImage(event.target.value)}
-                              className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                              placeholder="/images/fleet/ornek-arac.jpg"
-                            />
-                          </InputField>
-
-                          <InputField label="Yeni Görsel Yolu">
-                            <div className="flex gap-2">
-                              <input
-                                value={vehicleMediaPathInput}
-                                onChange={(event) => setVehicleMediaPathInput(event.target.value)}
-                                className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                                placeholder="/images/fleet/ornek-arac-2.jpg"
-                              />
-                              <button
-                                type="button"
-                                onClick={addVehicleGalleryImage}
-                                className="rounded-lg border border-navy-900/20 px-3 py-2 text-xs font-semibold text-navy-900"
-                              >
-                                Ekle
-                              </button>
-                            </div>
-                          </InputField>
+                        <div className="mt-4">
+                          <MediaUploader
+                            entitySlug={vehicleMediaFolder}
+                            value={vehicleForm.galleryImages || []}
+                            onChange={onVehicleGalleryChange}
+                            folderPrefix="fleet"
+                            title="Arac gorsellerini yukle"
+                          />
                         </div>
 
                         <div className="mt-4 rounded-xl border border-navy-900/10 bg-white p-3">
-                          <p className="mb-2 text-xs uppercase tracking-[0.12em] text-navy-900/60">
-                            Galeri Sırası
-                          </p>
-                          <div className="space-y-2">
-                            {(vehicleForm.galleryImages || []).map((path, index) => (
-                              <div
-                                key={`${path}-${index}`}
-                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-navy-900/10 p-2 text-xs"
-                              >
-                                <span className="max-w-[60%] truncate text-navy-900/75">{path}</span>
-                                <div className="flex flex-wrap gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => setVehicleMainImage(path)}
-                                    className="rounded border border-gold-300 px-2 py-1 text-gold-700"
-                                  >
-                                    Ana Görsel
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => moveVehicleGalleryImage(index, "up")}
-                                    className="rounded border border-navy-900/20 px-2 py-1 text-navy-900"
-                                  >
-                                    ↑
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => moveVehicleGalleryImage(index, "down")}
-                                    className="rounded border border-navy-900/20 px-2 py-1 text-navy-900"
-                                  >
-                                    ↓
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => removeVehicleGalleryImage(path)}
-                                    className="rounded border border-red-300 px-2 py-1 text-red-600"
-                                  >
-                                    Sil
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
+                          <p className="text-xs uppercase tracking-[0.12em] text-navy-900/60">Ana Görsel Önizleme</p>
+                          <div className="mt-3 flex items-center gap-3">
+                            <div className="relative h-20 w-32 overflow-hidden rounded-lg border border-navy-900/10 bg-cloud-100">
+                              <Image
+                                src={vehicleForm.mainImage || VEHICLE_PLACEHOLDER_IMAGE}
+                                alt="Ana araç görseli"
+                                fill
+                                sizes="128px"
+                                className="object-contain"
+                              />
+                            </div>
+                            <p className="text-xs text-navy-900/70">
+                              Listedeki ilk görsel ana görsel olarak kullanılır. İsterseniz yüklenen görsellerin sırasını değiştirerek
+                              ana görseli belirleyebilirsiniz.
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -1614,7 +1525,6 @@ export default function AdminPage() {
                                           vehicle.carouselActive ?? (vehicle.galleryImages || []).length > 1,
                                         carouselSpeed: vehicle.carouselSpeed ?? "normal"
                                       });
-                                      setVehicleMediaPathInput("");
                                       setVehiclePackageIndex(0);
                                       setVehicleWizardStep(1);
                                     }}
@@ -1654,7 +1564,6 @@ export default function AdminPage() {
                                         })),
                                         variants: []
                                       });
-                                      setVehicleMediaPathInput("");
                                       setVehiclePackageIndex(0);
                                       setVehicleWizardStep(1);
                                       flashSaved("Araç kopyası oluşturuldu. Düzenleyip kaydedebilirsiniz.");
@@ -1726,439 +1635,42 @@ export default function AdminPage() {
               </SectionCard>
             </div>
           ) : null}
-          {tab === "projects" ? (
-            <div className="space-y-6">
-              <SectionCard title="Proje Yönetimi">
-                <form onSubmit={onProjectSubmit} className="grid gap-4 md:grid-cols-2">
-                  <InputField label="Başlık (TR)">
-                    <input
-                      value={projectForm.titleTr}
-                      onChange={(event) => setProjectForm((prev) => ({ ...prev, titleTr: event.target.value }))}
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    />
-                  </InputField>
-                  <InputField label="Başlık (EN)">
-                    <input
-                      value={projectForm.titleEn}
-                      onChange={(event) => setProjectForm((prev) => ({ ...prev, titleEn: event.target.value }))}
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    />
-                  </InputField>
-                  <InputField label="Özet (TR)">
-                    <textarea
-                      rows={2}
-                      value={projectForm.summaryTr}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, summaryTr: event.target.value }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    />
-                  </InputField>
-                  <InputField label="Özet (EN)">
-                    <textarea
-                      rows={2}
-                      value={projectForm.summaryEn}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, summaryEn: event.target.value }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    />
-                  </InputField>
-                  <InputField label="Açıklama (TR)">
-                    <textarea
-                      rows={2}
-                      value={projectForm.descriptionTr}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, descriptionTr: event.target.value }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    />
-                  </InputField>
-                  <InputField label="Açıklama (EN)">
-                    <textarea
-                      rows={2}
-                      value={projectForm.descriptionEn}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, descriptionEn: event.target.value }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    />
-                  </InputField>
-                  <InputField label="Konum (TR)">
-                    <input
-                      value={projectForm.locationTr}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, locationTr: event.target.value }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    />
-                  </InputField>
-                  <InputField label="Location (EN)">
-                    <input
-                      value={projectForm.locationEn}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, locationEn: event.target.value }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    />
-                  </InputField>
-                  <InputField label="Kategori">
-                    <select
-                      value={projectForm.category}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, category: event.target.value as ProjectCategory }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    >
-                      {projectCategoryOptions.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </InputField>
-                  <InputField label="Durum">
-                    <select
-                      value={projectForm.status}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, status: event.target.value as ProjectStatus }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    >
-                      {projectStatusOptions.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </InputField>
-                  <InputField label="Ana Görsel Yolu">
-                    <input
-                      value={projectForm.featuredImage || ""}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({
-                          ...prev,
-                          featuredImage: event.target.value,
-                          imageUrl: event.target.value
-                        }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                      placeholder="/images/construction/projects/KNT-001/photos/1.jpg"
-                    />
-                  </InputField>
-                  <InputField label="Video Yolu">
-                    <input
-                      value={projectForm.videoUrl}
-                      onChange={(event) => setProjectForm((prev) => ({ ...prev, videoUrl: event.target.value }))}
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                      placeholder="/images/construction/projects/KNT-001/videos/1.mp4"
-                    />
-                  </InputField>
-                  <InputField label="Tarih (YYYY-MM)">
-                    <input
-                      value={projectForm.date}
-                      onChange={(event) => setProjectForm((prev) => ({ ...prev, date: event.target.value }))}
-                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                    />
-                  </InputField>
-                  <label className="rounded-xl border border-navy-900/15 bg-cloud-50 p-4 text-sm text-navy-900">
-                    <span className="mb-3 block font-semibold">Carousel Durumu</span>
-                    <select
-                      value={projectForm.carouselActive ? "on" : "off"}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, carouselActive: event.target.value === "on" }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 bg-white px-3 py-2"
-                    >
-                      <option value="on">Aktif</option>
-                      <option value="off">Pasif</option>
-                    </select>
-                  </label>
-                  <label className="rounded-xl border border-navy-900/15 bg-cloud-50 p-4 text-sm text-navy-900">
-                    <span className="mb-3 block font-semibold">Carousel Hızı</span>
-                    <select
-                      value={projectForm.carouselSpeed || "normal"}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, carouselSpeed: event.target.value as CarouselSpeed }))
-                      }
-                      className="w-full rounded-lg border border-navy-900/20 bg-white px-3 py-2"
-                    >
-                      {carouselSpeedOptions.map((speed) => (
-                        <option key={speed} value={speed}>
-                          {carouselSpeedLabelTr(speed)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm md:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={projectForm.featured}
-                      onChange={(event) =>
-                        setProjectForm((prev) => ({ ...prev, featured: event.target.checked }))
-                      }
-                    />
-                    Öne Çıkan
-                  </label>
-
-                  <div className="space-y-3 rounded-xl border border-navy-900/10 bg-cloud-50 p-4 md:col-span-2">
-                    <p className="text-sm font-semibold text-navy-900">
-                      Görseller hazır olduğunda buraya görsel yolları eklenecek.
-                    </p>
-                    <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                      <input
-                        value={projectMediaPathInput}
-                        onChange={(event) => setProjectMediaPathInput(event.target.value)}
-                        className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                        placeholder="/images/construction/projects/KNT-001/photos/1.jpg"
-                      />
-                      <button
-                        type="button"
-                        onClick={addProjectGalleryImage}
-                        className="rounded-lg border border-navy-900/20 px-4 py-2 text-xs font-semibold text-navy-900"
-                      >
-                        Görsel Ekle
-                      </button>
-                    </div>
-
-                    <div className="space-y-2">
-                      {(projectForm.galleryImages || []).map((path, index) => (
-                        <div
-                          key={`${path}-${index}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-navy-900/10 bg-white p-2 text-xs"
-                        >
-                          <span className="max-w-[60%] truncate text-navy-900/75">{path}</span>
-                          <div className="flex flex-wrap gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setProjectFeaturedImage(path)}
-                              className="rounded border border-gold-300 px-2 py-1 text-gold-700"
-                            >
-                              Ana Görsel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => moveProjectGalleryImage(index, "up")}
-                              className="rounded border border-navy-900/20 px-2 py-1 text-navy-900"
-                            >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => moveProjectGalleryImage(index, "down")}
-                              className="rounded border border-navy-900/20 px-2 py-1 text-navy-900"
-                            >
-                              ↓
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeProjectGalleryImage(path)}
-                              className="rounded border border-red-300 px-2 py-1 text-red-600"
-                            >
-                              Sil
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="relative h-40 overflow-hidden rounded-xl border border-navy-900/10 bg-cloud-50 md:col-span-2">
-                    <Image
-                      src={
-                        projectForm.featuredImage ||
-                        projectForm.imageUrl ||
-                        "/images/construction/project-placeholder-1.svg"
-                      }
-                      alt="Project preview"
-                      fill
-                      sizes="(max-width: 768px) 100vw, 900px"
-                      className="object-cover"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-navy-900 px-5 py-3 text-sm font-semibold text-white"
-                    >
-                      {projectEditId ? "Projeyi Güncelle" : "Proje Ekle"}
-                    </button>
-                  </div>
-                </form>
-              </SectionCard>
-
-              <SectionCard title="Proje Listesi">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-navy-900/10 text-navy-900/65">
-                        <th className="p-3">Proje</th>
-                        <th className="p-3">Kategori</th>
-                        <th className="p-3">Durum</th>
-                        <th className="p-3">İşlem</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {content.projects.map((project) => (
-                        <tr key={project.id} className="border-b border-navy-900/10">
-                          <td className="p-3">
-                            <p className="font-medium text-navy-900">{project.titleTr}</p>
-                            <p className="text-xs text-navy-900/60">{project.locationTr}</p>
-                          </td>
-                          <td className="p-3 text-xs">{project.category}</td>
-                          <td className="p-3 text-xs">{project.status}</td>
-                          <td className="p-3">
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                className="rounded-md border border-navy-900/20 px-2 py-1 text-xs"
-                                onClick={() => {
-                                  setProjectEditId(project.id);
-                                  setProjectForm({
-                                    ...project,
-                                    featuredImage: project.featuredImage || project.imageUrl,
-                                    galleryImages: Array.from(
-                                      new Set(
-                                        [project.featuredImage || project.imageUrl, ...(project.galleryImages || [])].filter(
-                                          Boolean
-                                        )
-                                      )
-                                    ),
-                                    carouselActive: project.carouselActive ?? (project.galleryImages || []).length > 1,
-                                    carouselSpeed: project.carouselSpeed ?? "normal"
-                                  });
-                                  setProjectMediaPathInput("");
-                                }}
-                              >
-                                Düzenle
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-600"
-                                onClick={() => {
-                                  if (!window.confirm("Bu projeyi silmek istiyor musunuz?")) return;
-                                  deleteProject(project.id);
-                                }}
-                              >
-                                Sil
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </SectionCard>
-            </div>
-          ) : null}
-
           {tab === "homepage-content" ? (
-            <SectionCard title="Ana Sayfa İçeriği">
+            <SectionCard
+              title="Kurumsal İçerik"
+              description="Yeni 3 panelli ana sayfa tasarımında hero/cta metinleri kullanılmaz. Bu alanda Hakkımızda içerikleri yönetilir."
+            >
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
-                  updateHome(homeForm);
                   updateAbout(aboutForm);
-                  flashSaved("Homepage içerikleri kaydedildi.");
+                  flashSaved("Kurumsal içerikler kaydedildi.");
                 }}
                 className="grid gap-4 md:grid-cols-2"
               >
-                <InputField label="Hero Başlık (TR)">
-                  <input
-                    value={homeForm.headlineTr}
-                    onChange={(event) => setHomeForm((prev) => ({ ...prev, headlineTr: event.target.value }))}
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Hero Başlık (EN)">
-                  <input
-                    value={homeForm.headlineEn}
-                    onChange={(event) => setHomeForm((prev) => ({ ...prev, headlineEn: event.target.value }))}
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Hero Alt Başlık (TR)">
-                  <textarea
-                    rows={2}
-                    value={homeForm.subHeadlineTr}
-                    onChange={(event) => setHomeForm((prev) => ({ ...prev, subHeadlineTr: event.target.value }))}
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Hero Alt Başlık (EN)">
-                  <textarea
-                    rows={2}
-                    value={homeForm.subHeadlineEn}
-                    onChange={(event) => setHomeForm((prev) => ({ ...prev, subHeadlineEn: event.target.value }))}
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="CTA (TR)">
-                  <input
-                    value={homeForm.ctaTr}
-                    onChange={(event) => setHomeForm((prev) => ({ ...prev, ctaTr: event.target.value }))}
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="CTA (EN)">
-                  <input
-                    value={homeForm.ctaEn}
-                    onChange={(event) => setHomeForm((prev) => ({ ...prev, ctaEn: event.target.value }))}
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Service Başlık (TR)">
-                  <input
-                    value={homeForm.serviceTitleTr}
-                    onChange={(event) => setHomeForm((prev) => ({ ...prev, serviceTitleTr: event.target.value }))}
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Service Başlık (EN)">
-                  <input
-                    value={homeForm.serviceTitleEn}
-                    onChange={(event) => setHomeForm((prev) => ({ ...prev, serviceTitleEn: event.target.value }))}
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Service Açıklama (TR)">
-                  <textarea
-                    rows={2}
-                    value={homeForm.serviceDescriptionTr}
-                    onChange={(event) =>
-                      setHomeForm((prev) => ({ ...prev, serviceDescriptionTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Service Açıklama (EN)">
-                  <textarea
-                    rows={2}
-                    value={homeForm.serviceDescriptionEn}
-                    onChange={(event) =>
-                      setHomeForm((prev) => ({ ...prev, serviceDescriptionEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="About Başlık (TR)">
+                <div className="md:col-span-2 rounded-xl border border-gold-500/25 bg-gold-50/50 p-4">
+                  <p className="text-base font-semibold text-navy-900">Hakkımızda İçeriği</p>
+                  <p className="mt-1 text-sm text-navy-900/72">
+                    Bu alandaki açıklamalar Hakkımızda sayfasındaki Kurumsal Kimlik bölümünde yayınlanır.
+                  </p>
+                </div>
+                <InputField label="Hakkımızda Başlık (TR)">
                   <input
                     value={aboutForm.titleTr}
                     onChange={(event) => setAboutForm((prev) => ({ ...prev, titleTr: event.target.value }))}
                     className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
                   />
                 </InputField>
-                <InputField label="About Başlık (EN)">
+                <InputField label="Hakkımızda Başlık (EN)">
                   <input
                     value={aboutForm.titleEn}
                     onChange={(event) => setAboutForm((prev) => ({ ...prev, titleEn: event.target.value }))}
                     className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
                   />
                 </InputField>
-                <InputField label="About Açıklama (TR)">
+                <InputField label="Hakkımızda Açıklama (TR)">
                   <textarea
-                    rows={2}
+                    rows={8}
                     value={aboutForm.descriptionTr}
                     onChange={(event) =>
                       setAboutForm((prev) => ({ ...prev, descriptionTr: event.target.value }))
@@ -2166,9 +1678,9 @@ export default function AdminPage() {
                     className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
                   />
                 </InputField>
-                <InputField label="About Açıklama (EN)">
+                <InputField label="Hakkımızda Açıklama (EN)">
                   <textarea
-                    rows={2}
+                    rows={8}
                     value={aboutForm.descriptionEn}
                     onChange={(event) =>
                       setAboutForm((prev) => ({ ...prev, descriptionEn: event.target.value }))
@@ -2177,142 +1689,17 @@ export default function AdminPage() {
                   />
                 </InputField>
                 <div className="md:col-span-2">
-                  <button type="submit" className="rounded-lg bg-navy-900 px-5 py-3 text-sm font-semibold text-white">
-                    Kaydet
-                  </button>
+                  <InputField label="Hakkımızda Video URL">
+                    <input
+                      value={aboutForm.videoUrl || ""}
+                      onChange={(event) =>
+                        setAboutForm((prev) => ({ ...prev, videoUrl: event.target.value }))
+                      }
+                      className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                      placeholder="/images/general/about-video.mp4"
+                    />
+                  </InputField>
                 </div>
-              </form>
-            </SectionCard>
-          ) : null}
-
-          {tab === "construction-content" ? (
-            <SectionCard title="İnşaat İçerikleri">
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  updateConstruction(constructionForm);
-                  flashSaved("Construction içerikleri kaydedildi.");
-                }}
-                className="grid gap-4 md:grid-cols-2"
-              >
-                <InputField label="Başlık (TR)">
-                  <input
-                    value={constructionForm.titleTr}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, titleTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Başlık (EN)">
-                  <input
-                    value={constructionForm.titleEn}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, titleEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Açıklama (TR)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.descriptionTr}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, descriptionTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Açıklama (EN)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.descriptionEn}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, descriptionEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Residential (TR)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.residentialTr}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, residentialTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Residential (EN)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.residentialEn}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, residentialEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Commercial (TR)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.commercialTr}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, commercialTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Commercial (EN)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.commercialEn}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, commercialEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Renovation (TR)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.renovationTr}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, renovationTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Renovation (EN)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.renovationEn}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, renovationEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Turnkey (TR)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.turnkeyTr}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, turnkeyTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Turnkey (EN)">
-                  <textarea
-                    rows={2}
-                    value={constructionForm.turnkeyEn}
-                    onChange={(event) =>
-                      setConstructionForm((prev) => ({ ...prev, turnkeyEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
                 <div className="md:col-span-2">
                   <button type="submit" className="rounded-lg bg-navy-900 px-5 py-3 text-sm font-semibold text-white">
                     Kaydet
@@ -2322,140 +1709,49 @@ export default function AdminPage() {
             </SectionCard>
           ) : null}
 
-          {tab === "architecture-content" ? (
-            <SectionCard title="Mimarlık İçerikleri">
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  updateArchitecture(architectureForm);
-                  flashSaved("Architecture içerikleri kaydedildi.");
+                    {tab === "construction-content" ? (
+            <SectionCard
+              title="İnşaat İçerikleri"
+              description="İnşaat metinlerini ve proje kart yazılarını sade, mobil uyumlu yapıdan yönetin."
+            >
+              <ConstructionContentManager
+                initialContent={constructionForm}
+                initialProjectTextGroups={content.projectCardTexts?.construction ?? {}}
+                projectIds={constructionProjectIds}
+                onSave={({ content: nextContent, projectTexts }) => {
+                  setConstructionForm(nextContent);
+                  updateConstruction(nextContent);
+                  updateProjectCardTexts("construction", projectTexts);
+                  flashSaved("İnşaat içerikleri kaydedildi.");
                 }}
-                className="grid gap-4 md:grid-cols-2"
-              >
-                <InputField label="Başlık (TR)">
-                  <input
-                    value={architectureForm.titleTr}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, titleTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Başlık (EN)">
-                  <input
-                    value={architectureForm.titleEn}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, titleEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Açıklama (TR)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.descriptionTr}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, descriptionTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Açıklama (EN)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.descriptionEn}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, descriptionEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Interior (TR)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.interiorTr}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, interiorTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Interior (EN)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.interiorEn}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, interiorEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Exterior (TR)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.exteriorTr}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, exteriorTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Exterior (EN)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.exteriorEn}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, exteriorEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Drawing (TR)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.drawingTr}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, drawingTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Drawing (EN)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.drawingEn}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, drawingEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Concept (TR)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.conceptTr}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, conceptTr: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <InputField label="Concept (EN)">
-                  <textarea
-                    rows={2}
-                    value={architectureForm.conceptEn}
-                    onChange={(event) =>
-                      setArchitectureForm((prev) => ({ ...prev, conceptEn: event.target.value }))
-                    }
-                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
-                  />
-                </InputField>
-                <div className="md:col-span-2">
-                  <button type="submit" className="rounded-lg bg-navy-900 px-5 py-3 text-sm font-semibold text-white">
-                    Kaydet
-                  </button>
-                </div>
-              </form>
+                onSaved={flashSaved}
+              />
+            </SectionCard>
+          ) : null}
+
+          {tab === "architecture-projects" ? (
+            <SectionCard
+              title="Mimarlık Projeleri"
+              description="Kategori ve proje içeriklerini buradan yönetin. Değişiklikler Mimarlık sayfasına yansır."
+            >
+              <ArchitectureProjectsManager onSaved={flashSaved} />
+            </SectionCard>
+          ) : null}
+
+          {tab === "fleet-information" ? (
+            <SectionCard
+              title="Filo Bilgilendirme Ayarları"
+              description="Bu bilgiler tüm araç detaylarında ortak olarak gösterilir."
+            >
+              <FleetInformationManager
+                initialContent={fleetInformationForm}
+                onSave={(nextContent) => {
+                  setFleetInformationForm(nextContent);
+                  updateFleetInformation(nextContent);
+                  flashSaved("Filo bilgilendirme ayarları kaydedildi.");
+                }}
+                onSaved={flashSaved}
+              />
             </SectionCard>
           ) : null}
 
@@ -2476,10 +1772,43 @@ export default function AdminPage() {
                     className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
                   />
                 </InputField>
-                <InputField label="WhatsApp (90XXXXXXXXXX)">
+                <InputField label="Genel İletişim WhatsApp Numarası">
                   <input
-                    value={contactForm.whatsapp}
-                    onChange={(event) => setContactForm((prev) => ({ ...prev, whatsapp: event.target.value }))}
+                    value={contactForm.whatsappGeneral || contactForm.whatsapp || ""}
+                    onChange={(event) =>
+                      setContactForm((prev) => ({
+                        ...prev,
+                        whatsappGeneral: event.target.value,
+                        whatsapp: event.target.value
+                      }))
+                    }
+                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                  />
+                </InputField>
+                <InputField label="Filo WhatsApp Numarası">
+                  <input
+                    value={contactForm.whatsappFleet || ""}
+                    onChange={(event) =>
+                      setContactForm((prev) => ({ ...prev, whatsappFleet: event.target.value }))
+                    }
+                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                  />
+                </InputField>
+                <InputField label="İnşaat WhatsApp Numarası">
+                  <input
+                    value={contactForm.whatsappConstruction || ""}
+                    onChange={(event) =>
+                      setContactForm((prev) => ({ ...prev, whatsappConstruction: event.target.value }))
+                    }
+                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                  />
+                </InputField>
+                <InputField label="Mimarlık WhatsApp Numarası">
+                  <input
+                    value={contactForm.whatsappArchitecture || ""}
+                    onChange={(event) =>
+                      setContactForm((prev) => ({ ...prev, whatsappArchitecture: event.target.value }))
+                    }
                     className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
                   />
                 </InputField>
@@ -2504,10 +1833,17 @@ export default function AdminPage() {
                     className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
                   />
                 </InputField>
-                <InputField label="Harita Bağlantısı">
+                <InputField label="Google Maps Embed URL">
                   <input
                     value={contactForm.mapEmbedUrl}
                     onChange={(event) => setContactForm((prev) => ({ ...prev, mapEmbedUrl: event.target.value }))}
+                    className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
+                  />
+                </InputField>
+                <InputField label="Google Maps Link">
+                  <input
+                    value={contactForm.mapLinkUrl || ""}
+                    onChange={(event) => setContactForm((prev) => ({ ...prev, mapLinkUrl: event.target.value }))}
                     className="w-full rounded-lg border border-navy-900/20 px-3 py-2"
                   />
                 </InputField>
@@ -2758,4 +2094,6 @@ export default function AdminPage() {
     </main>
   );
 }
+
+
 

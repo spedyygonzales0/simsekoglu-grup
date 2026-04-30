@@ -5,18 +5,23 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "dev:next": "next dev",
-    "dev:direct": "node scripts/dev-direct.js",
-    "build": "next build",
+    "dev:direct": "next dev -p 3000",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && next build",
     "start": "next start",
-    "lint": "next lint",
-    "media:construction": "node scripts/generate-construction-media-manifest.mjs"
+    "lint": "eslint .",
+    "media:fleet": "node scripts/generate-fleet-media-manifest.mjs",
+    "media:construction": "node scripts/generate-construction-media-manifest.mjs",
+    "media:architecture": "node scripts/generate-architecture-media-manifest.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.1",
     "next": "^16.2.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },
   "devDependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@types/node": "22.13.10",
     "@types/react": "19.0.12",
     "@types/react-dom": "19.0.4",
@@ -25,6 +30,7 @@
     "eslint-config-next": "15.2.3",
     "postcss": "8.5.3",
     "tailwindcss": "3.4.17",
-    "typescript": "5.8.2"
+    "typescript": "5.8.2",
+    "vercel": "^52.0.0"
   }
 }

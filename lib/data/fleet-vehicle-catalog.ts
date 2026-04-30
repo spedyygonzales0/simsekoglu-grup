@@ -1,4 +1,5 @@
 ﻿import { IMAGE_FOLDERS } from "@/lib/data/image-map";
+import { fleetMediaManifest } from "@/lib/data/fleet-media-manifest";
 import { Vehicle, VehicleCategory } from "@/lib/types";
 
 interface VehicleSeed {
@@ -207,7 +208,44 @@ const VEHICLE_INFO_BY_SLUG: Record<string, { tr: string; en: string }> = {
   }
 };
 
+function normalizeLookup(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ı/g, "i")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function getFleetImagesBySeed(seed: VehicleSeed): { mainImage: string; galleryImages: string[] } {
+  const fallbackImage = `${IMAGE_FOLDERS.fleet}/vehicle-placeholder.svg`;
+  const folderCandidates = [
+    `${seed.brand} ${seed.model}`,
+    seed.model,
+    seed.slug.replace(/-/g, " ")
+  ]
+    .map(normalizeLookup)
+    .filter(Boolean);
+
+  const matchedCandidates = fleetMediaManifest.filter((entry) => folderCandidates.includes(entry.normalizedFolder));
+  const matched =
+    matchedCandidates.find((entry) => entry.images.some((imagePath) => imagePath.includes("/images/fleet/aracresimleri/"))) ||
+    matchedCandidates[0];
+  if (!matched || !matched.images.length) {
+    return {
+      mainImage: fallbackImage,
+      galleryImages: [fallbackImage]
+    };
+  }
+  const galleryImages = Array.from(new Set(matched.images));
+  return {
+    mainImage: galleryImages[0] || fallbackImage,
+    galleryImages: galleryImages.length ? galleryImages : [fallbackImage]
+  };
+}
+
 function createVehicle(seed: VehicleSeed): Vehicle {
+  const { mainImage, galleryImages } = getFleetImagesBySeed(seed);
   const fallbackInfo = VEHICLE_INFO_BY_SLUG[seed.slug];
   return {
     id: seed.id,
@@ -219,9 +257,14 @@ function createVehicle(seed: VehicleSeed): Vehicle {
     secondaryCategories: seed.secondaryCategories,
     infoTr: seed.infoTr || fallbackInfo?.tr || "",
     infoEn: seed.infoEn || fallbackInfo?.en || "",
+    servicesText: "",
+    termsText: "",
+    userRulesText: "",
     officialUrl: seed.officialUrl || "",
-    mainImage: `${IMAGE_FOLDERS.fleet}/${seed.image}`,
-    galleryImages: [`${IMAGE_FOLDERS.fleet}/${seed.image}`],
+    mainImage,
+    galleryImages,
+    carouselActive: galleryImages.length > 1,
+    carouselSpeed: "normal",
     featured: Boolean(seed.featured),
     active: true,
     rentalPackages: []
@@ -304,3 +347,12 @@ const fleetVehicleSeeds: VehicleSeed[] = [
 ];
 
 export const defaultFleetVehicles: Vehicle[] = fleetVehicleSeeds.map(createVehicle);
+
+export function getFleetMediaBySlug(slug: string): { mainImage: string; galleryImages: string[] } | null {
+  const vehicle = defaultFleetVehicles.find((item) => item.slug === slug);
+  if (!vehicle) return null;
+  return {
+    mainImage: vehicle.mainImage,
+    galleryImages: [...(vehicle.galleryImages || [vehicle.mainImage])]
+  };
+}

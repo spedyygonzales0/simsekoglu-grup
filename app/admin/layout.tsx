@@ -1,15 +1,11 @@
-import { Metadata } from "next";
-import { buildPageMetadata } from "@/lib/seo";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  ...buildPageMetadata({
-    title: "Admin Panel | Şimşekoğlu Grup",
-    description: "Şimşekoğlu Grup içerik ve yönetim paneli.",
-    path: "/admin"
-  }),
+  title: "Yönetim Paneli",
   robots: {
     index: false,
-    follow: false
+    follow: false,
+    nocache: true
   }
 };
 

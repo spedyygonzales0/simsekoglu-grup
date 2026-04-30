@@ -9,6 +9,13 @@
   --anim-reveal-offset: 18px;
   --anim-reveal-duration: 0.55s;
   --anim-btn-lift: -1px;
+  --surface-main: #f5f7fb;
+  --surface-card: #ffffff;
+  --text-strong: #0b1f3a;
+  --text-muted: rgba(11, 31, 58, 0.9);
+  --shadow-soft-lg: 0 16px 36px -24px rgba(8, 25, 48, 0.38);
+  --shadow-soft-md: 0 10px 24px -18px rgba(8, 25, 48, 0.28);
+  --gold-strong: #b88a2f;
 }
 
 .motion-vivid {
@@ -20,11 +27,18 @@
 }
 
 body {
-  @apply bg-cloud-50 text-base text-navy-900 antialiased;
+  @apply antialiased;
   font-family: Inter, "Segoe UI", Tahoma, sans-serif;
+  font-size: 17px;
+  line-height: 1.68;
+  color: var(--text-strong);
+  background-color: #f2f5fa;
   background-image:
-    radial-gradient(circle at 20% 10%, rgba(199, 155, 74, 0.16), transparent 40%),
-    radial-gradient(circle at 80% 0%, rgba(17, 42, 78, 0.1), transparent 35%);
+    radial-gradient(circle at 10% -8%, rgba(185, 139, 53, 0.1), transparent 34%),
+    radial-gradient(circle at 88% 0%, rgba(17, 42, 78, 0.06), transparent 30%),
+    linear-gradient(to bottom, #f7f9fc 0%, #eff3f8 100%);
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 h1,
@@ -39,19 +53,29 @@ h6 {
 
 p,
 li {
-  line-height: 1.7;
+  line-height: 1.66;
+}
+
+input,
+select,
+textarea,
+button {
+  font-size: 1rem;
 }
 
 .container-wide {
-  @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  @apply mx-auto w-full max-w-[94rem] px-4 sm:px-6 lg:px-8;
 }
 
 .section-spacing {
-  @apply py-16 sm:py-20;
+  @apply py-12 sm:py-16;
 }
 
 .glass-card {
-  @apply rounded-2xl border border-white/20 bg-white/90 shadow-soft backdrop-blur-sm;
+  @apply rounded-2xl border backdrop-blur-sm;
+  border-color: rgba(12, 36, 68, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(252, 253, 255, 0.92) 100%);
+  box-shadow: 0 14px 30px -24px rgba(8, 25, 48, 0.32);
 }
 
 .premium-gradient {
@@ -63,58 +87,110 @@ li {
 }
 
 .page-title {
-  @apply font-display text-4xl font-bold leading-tight text-navy-900 sm:text-5xl lg:text-6xl;
+  @apply font-display text-[2.75rem] font-bold leading-[1.06] sm:text-[3.35rem] lg:text-[3.9rem];
+  letter-spacing: -0.015em;
 }
 
 .section-title {
-  @apply font-display text-3xl font-bold leading-tight text-navy-900 sm:text-4xl;
+  @apply font-display text-[1.95rem] font-bold leading-[1.15] sm:text-[2.25rem] lg:text-[2.45rem];
+  letter-spacing: -0.012em;
 }
 
 .card-title {
-  @apply font-display text-2xl font-semibold leading-tight text-navy-900 sm:text-[1.75rem];
+  @apply font-display text-[1.55rem] font-semibold leading-[1.2] sm:text-[1.75rem];
 }
 
 .body-text {
-  @apply text-base leading-relaxed sm:text-[1.0625rem];
+  @apply text-[1.05rem] leading-[1.72] sm:text-[1.12rem];
 }
 
 .muted-text {
-  @apply text-[0.98rem] leading-relaxed text-navy-900/70;
+  @apply text-[1.03rem] leading-[1.68];
+  color: rgba(11, 31, 58, 0.86);
+}
+
+.small-note {
+  @apply text-[0.96rem] leading-[1.6];
+  color: rgba(11, 31, 58, 0.84);
 }
 
 .admin-label {
-  @apply text-[0.95rem] font-semibold text-navy-900;
+  @apply text-[1.04rem] font-semibold leading-7 text-navy-900;
 }
 
 .admin-input {
-  @apply w-full rounded-lg border border-navy-900/20 px-4 py-3 text-[0.98rem] leading-6 text-navy-900;
+  @apply w-full rounded-lg border border-navy-900/35 bg-white px-4 py-3 text-[1.04rem] leading-7 text-navy-900;
 }
 
 .price-text {
-  @apply text-3xl font-extrabold tracking-tight text-navy-900 sm:text-4xl;
+  @apply text-3xl font-extrabold tracking-tight sm:text-4xl;
+  color: #081c38;
 }
 
 .premium-btn {
-  font-size: 0.98rem;
+  font-size: 1rem;
   line-height: 1.25rem;
 }
 
+.button-text {
+  @apply text-[1.02rem] font-bold leading-6;
+}
+
 .admin-surface {
-  font-size: 1rem;
-  line-height: 1.6;
+  font-size: 1.06rem;
+  line-height: 1.65;
+}
+
+.admin-surface h1 {
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.admin-surface h2 {
+  font-size: 1.75rem;
+  line-height: 1.25;
+}
+
+.admin-surface .section-title {
+  font-size: 1.85rem;
 }
 
 .admin-surface table th,
 .admin-surface table td {
-  font-size: 0.96rem;
-  line-height: 1.55;
+  font-size: 1rem;
+  line-height: 1.64;
 }
 
 .admin-surface input,
 .admin-surface select,
 .admin-surface textarea {
-  min-height: 46px;
+  min-height: 48px;
+  font-size: 1rem;
+}
+
+.admin-surface .text-xs {
   font-size: 0.98rem;
+  line-height: 1.56;
+}
+
+.admin-surface .text-sm {
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.admin-surface aside a,
+.admin-surface aside button {
+  font-size: 1.04rem;
+  line-height: 1.5;
+}
+
+.admin-surface th,
+.admin-surface td {
+  color: rgba(11, 31, 58, 0.96);
+}
+
+.admin-surface ::placeholder {
+  color: rgba(11, 31, 58, 0.5);
 }
 
 .landing-panel-grid {
@@ -170,6 +246,15 @@ li {
     box-shadow 260ms ease,
     border-color 220ms ease;
   will-change: transform;
+  box-shadow: var(--shadow-soft-lg);
+  border-color: rgba(12, 36, 68, 0.14);
+  background: linear-gradient(180deg, #ffffff 0%, #fdfefe 100%);
+}
+
+.surface-shell {
+  border: 1px solid rgba(12, 36, 68, 0.12);
+  background: linear-gradient(180deg, #f9fbfe 0%, #f3f6fb 100%);
+  box-shadow: 0 22px 42px -32px rgba(8, 25, 48, 0.34);
 }
 
 .premium-card:hover {
@@ -205,6 +290,15 @@ li {
 .reveal-scroll.is-visible {
   opacity: 1;
   transform: translate3d(0, 0, 0);
+}
+
+a {
+  transition: color 180ms ease;
+}
+
+::selection {
+  background: rgba(184, 138, 47, 0.2);
+  color: #061a33;
 }
 
 @media (prefers-reduced-motion: reduce) {

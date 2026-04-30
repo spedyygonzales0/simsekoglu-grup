@@ -1,142 +1,109 @@
 ﻿"use client";
 
-import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
-import { ProjectCard } from "@/components/projects/project-card";
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useSiteData } from "@/components/providers/site-data-provider";
-import { CtaBanner } from "@/components/shared/cta-banner";
-import { PageHero } from "@/components/shared/page-hero";
 import { QuoteButton } from "@/components/shared/quote-button";
 import { SectionTitle } from "@/components/shared/section-title";
-import { getSafeProjectGalleryImages, getSafeProjectVideo } from "@/lib/data/image-map";
-import { projectStatusLabel, serviceTypeLabel } from "@/lib/i18n";
-import { Project } from "@/lib/types";
+import { getArchitecturePortfolioData } from "@/lib/services/architecture-service";
+import { ArchitectureCategory } from "@/lib/types";
 
-const MediaLightbox = dynamic(
-  () => import("@/components/media/media-lightbox").then((mod) => mod.MediaLightbox),
-  { ssr: false }
-);
+const ARCHITECTURE_PLACEHOLDER = "/images/architecture/project-placeholder-1.svg";
 
 export default function ArchitecturePage() {
-  const { locale, content } = useSiteData();
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const { locale } = useSiteData();
+  const [categories, setCategories] = useState<ArchitectureCategory[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const architectureProjects = useMemo(
-    () => content.projects.filter((project) => project.category === "architecture"),
-    [content.projects]
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const data = await getArchitecturePortfolioData();
+      if (!mounted) return;
+      setCategories(data.categories.filter((item) => item.active));
+      setLoading(false);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => a.sortOrder - b.sortOrder),
+    [categories]
   );
 
-  const services = [
-    {
-      tr: "İç Mimarlık",
-      en: "Interior Architecture",
-      descriptionTr: content.architecture.interiorTr,
-      descriptionEn: content.architecture.interiorEn
-    },
-    {
-      tr: "Dış Mimarlık",
-      en: "Exterior Architecture",
-      descriptionTr: content.architecture.exteriorTr,
-      descriptionEn: content.architecture.exteriorEn
-    },
-    {
-      tr: "Proje Çizimi",
-      en: "Project Drawing",
-      descriptionTr: content.architecture.drawingTr,
-      descriptionEn: content.architecture.drawingEn
-    },
-    {
-      tr: "Konsept Tasarım",
-      en: "Concept Design",
-      descriptionTr: content.architecture.conceptTr,
-      descriptionEn: content.architecture.conceptEn
-    }
-  ];
-
   return (
-    <>
-      <PageHero
-        eyebrow={locale === "tr" ? "Mimarlık" : "Architecture"}
-        title={locale === "tr" ? content.architecture.titleTr : content.architecture.titleEn}
-        description={locale === "tr" ? content.architecture.descriptionTr : content.architecture.descriptionEn}
-      />
-
-      <section className="section-spacing">
-        <div className="container-wide">
-          <SectionTitle
-            title={locale === "tr" ? "Mimari Hizmetler" : "Architecture Services"}
-            description={
-              locale === "tr"
-                ? "Her ölçekte proje için konseptten uygulamaya güçlü tasarım altyapısı."
-                : "Strong design infrastructure from concept to implementation for every scale."
-            }
-          />
-          <div className="grid gap-5 sm:grid-cols-2">
-            {services.map((service) => (
-              <div key={service.tr} className="glass-card p-6">
-                <h3 className="font-display text-2xl text-navy-900">{locale === "tr" ? service.tr : service.en}</h3>
-                <p className="mt-2 text-sm text-navy-900/70">
-                  {locale === "tr" ? service.descriptionTr : service.descriptionEn}
-                </p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-8 flex justify-start">
-            <QuoteButton
-              serviceType="architecture"
-              selectedLabel={locale === "tr" ? "Mimarlık Hizmeti Teklifi" : "Architecture Service Quote"}
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-white py-16 sm:py-20">
-        <div className="container-wide">
-          <SectionTitle title={locale === "tr" ? "Örnek Projeler ve Galeri" : "Sample Projects and Visual Gallery"} />
-          <p className="mb-6 rounded-xl border border-gold-500/30 bg-gold-50 px-4 py-3 text-sm text-navy-900/80">
-            {locale === "tr"
-              ? "Bu bölüm tasarım, çizim ve konsept odaklı mimarlık projelerini gösterir. Uygulama odaklı işler için İnşaat sayfasını inceleyin."
-              : "This section shows design, drawing, and concept focused architecture projects. For execution-focused work, visit the Construction page."}
-          </p>
-
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {architectureProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onOpen={(item, imageIndex = 0) => {
-                  setSelectedProject(item);
-                  setSelectedImageIndex(imageIndex);
-                }}
-              />
-            ))}
-
-            {!architectureProjects.length ? (
-              <div className="rounded-2xl border border-dashed border-navy-900/20 bg-cloud-50 p-8 text-sm text-navy-900/60">
-                {locale === "tr" ? "Yakında Proje Eklenecek" : "Projects Coming Soon"}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
-      {selectedProject ? (
-        <MediaLightbox
-          isOpen={Boolean(selectedProject)}
-          onClose={() => setSelectedProject(null)}
-          title={locale === "tr" ? selectedProject.titleTr : selectedProject.titleEn}
-          categoryLabel={serviceTypeLabel(selectedProject.category, locale)}
-          location={locale === "tr" ? selectedProject.locationTr : selectedProject.locationEn}
-          statusLabel={projectStatusLabel(selectedProject.status, locale)}
-          description={locale === "tr" ? selectedProject.descriptionTr : selectedProject.descriptionEn}
-          images={getSafeProjectGalleryImages(selectedProject)}
-          initialIndex={selectedImageIndex}
-          videoUrl={getSafeProjectVideo(selectedProject)}
+    <section className="section-spacing">
+      <div className="container-wide">
+        <SectionTitle
+          title={locale === "tr" ? "Mimarlık Kategorileri" : "Architecture Categories"}
+          description={
+            locale === "tr"
+              ? "Mimarlık portföyümüzü proje türüne göre inceleyin."
+              : "Explore our architecture portfolio by project type."
+          }
         />
-      ) : null}
 
-      <CtaBanner />
-    </>
+        {loading ? (
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="h-[380px] animate-pulse rounded-2xl border border-navy-900/10 bg-white" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {sortedCategories.map((category) => (
+              <article
+                key={category.id}
+                className="group overflow-hidden rounded-2xl border border-navy-900/10 bg-white shadow-soft transition duration-500 hover:-translate-y-1 hover:shadow-lg"
+              >
+                <div className="relative h-52 overflow-hidden">
+                  <Image
+                    src={category.coverImageUrl || ARCHITECTURE_PLACEHOLDER}
+                    alt={locale === "tr" ? category.titleTr : category.titleEn}
+                    fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                    className="object-cover transition duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-navy-950/55 via-navy-950/15 to-transparent" />
+                </div>
+                <div className="space-y-4 p-6">
+                  <h2 className="card-title text-2xl text-navy-900">
+                    {locale === "tr" ? category.titleTr : category.titleEn}
+                  </h2>
+                  <p className="body-text min-h-[72px] text-navy-900/78">
+                    {locale === "tr" ? category.descriptionTr : category.descriptionEn}
+                  </p>
+                  <Link
+                    href={`/architecture/${category.slug}`}
+                    className="inline-flex rounded-xl border border-gold-500 px-4 py-2 text-sm font-semibold text-navy-900 transition hover:bg-gold-500 hover:text-navy-950"
+                  >
+                    {locale === "tr" ? "Projeleri İncele" : "Explore Projects"}
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {!loading && !sortedCategories.length ? (
+          <div className="mt-6 rounded-xl border border-navy-900/15 bg-white px-6 py-10 text-center text-navy-900/70">
+            {locale === "tr"
+              ? "Henüz aktif mimarlık kategorisi bulunmuyor."
+              : "There are no active architecture categories yet."}
+          </div>
+        ) : null}
+
+        <div className="mt-10 flex justify-start">
+          <QuoteButton
+            serviceType="architecture"
+            selectedLabel={locale === "tr" ? "Mimarlık Hizmeti Teklifi" : "Architecture Service Quote"}
+            showFormButton={false}
+          />
+        </div>
+      </div>
+    </section>
   );
 }

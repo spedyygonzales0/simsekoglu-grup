@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { useSiteData } from "@/components/providers/site-data-provider";
+import { MaintenanceScreen } from "@/components/shared/maintenance-screen";
 import { FloatingWhatsAppButton } from "@/components/shared/floating-whatsapp-button";
 
 const QuoteRequestModal = dynamic(
@@ -14,9 +15,10 @@ const QuoteRequestModal = dynamic(
 
 export function SiteShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { isHydrated } = useSiteData();
+  const { isHydrated, content } = useSiteData();
   const isAdminRoute = pathname.startsWith("/admin");
   const isHomeRoute = pathname === "/";
+  const maintenanceMode = content.settings?.maintenanceMode;
 
   if (isAdminRoute) {
     return <>{children}</>;
@@ -28,6 +30,10 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
         <p className="text-sm text-navy-900/60">Loading...</p>
       </div>
     );
+  }
+
+  if (maintenanceMode) {
+    return <MaintenanceScreen companyName="Şimşekoğlu Grup" />;
   }
 
   return (

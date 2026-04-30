@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { TouchEvent, useEffect, useMemo, useState } from "react";
 import { CarouselSpeed } from "@/lib/types";
 
 interface MediaCarouselProps {
@@ -15,6 +15,7 @@ interface MediaCarouselProps {
   onOpen?: (index: number) => void;
   showControls?: boolean;
   showIndicators?: boolean;
+  imageFit?: "cover" | "contain";
 }
 
 const SPEED_MS: Record<CarouselSpeed, number> = {
@@ -33,10 +34,12 @@ export function MediaCarousel({
   carouselSpeed = "normal",
   onOpen,
   showControls = true,
-  showIndicators = true
+  showIndicators = true,
+  imageFit = "cover"
 }: MediaCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
   const uniqueImages = useMemo(() => Array.from(new Set(images.filter(Boolean))), [images]);
   const imagesKey = useMemo(() => uniqueImages.join("|"), [uniqueImages]);
@@ -66,11 +69,31 @@ export function MediaCarousel({
     setActiveIndex((prev) => (prev + 1) % uniqueImages.length);
   };
 
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    setTouchStartX(event.touches[0]?.clientX ?? null);
+  };
+
+  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    if (!hasMultiple || touchStartX === null) return;
+    const endX = event.changedTouches[0]?.clientX ?? touchStartX;
+    const delta = endX - touchStartX;
+    if (Math.abs(delta) < 40) return;
+    if (delta > 0) {
+      goPrev();
+      return;
+    }
+    goNext();
+  };
+
+  const fitClass = imageFit === "contain" ? "object-contain" : "object-cover";
+
   return (
     <div
       className={`relative overflow-hidden rounded-xl border border-navy-900/10 bg-cloud-50 ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {activeImage ? (
         onOpen ? (
@@ -86,7 +109,7 @@ export function MediaCarousel({
               height={800}
               sizes={imageSizes}
               loading="lazy"
-              className={`h-full w-full object-cover transition duration-500 ${
+              className={`h-full w-full ${fitClass} transition duration-500 ${
                 hasMultiple ? "hover:scale-[1.02]" : ""
               }`}
             />
@@ -100,7 +123,7 @@ export function MediaCarousel({
               height={800}
               sizes={imageSizes}
               loading="lazy"
-              className="h-full w-full object-cover transition duration-500"
+              className={`h-full w-full ${fitClass} transition duration-500`}
             />
           </div>
         )

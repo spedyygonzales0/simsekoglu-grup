@@ -12,16 +12,16 @@ export function LanguageSwitcher() {
   ];
 
   return (
-    <div className="inline-flex rounded-full border border-white/30 bg-white/10 p-1">
+    <div className="inline-flex rounded-full border border-white/35 bg-white/12 p-1">
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           onClick={() => setLocale(option.value)}
-          className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+          className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${
             locale === option.value
               ? "bg-gold-500 text-navy-900"
-              : "text-white hover:bg-white/15"
+              : "text-white/95 hover:bg-white/18"
           }`}
         >
           {option.label}

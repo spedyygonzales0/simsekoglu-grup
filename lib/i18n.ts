@@ -1,8 +1,10 @@
 ﻿import {
+  FuelType,
   Locale,
   ProjectStatus,
   QuoteRequestStatus,
   ServiceType,
+  TransmissionType,
   TranslationMap,
   VariantAvailabilityStatus,
   VehicleCategory
@@ -108,4 +110,23 @@ export function serviceTypeLabel(serviceType: ServiceType, locale: Locale): stri
   };
 
   return map[serviceType][locale];
+}
+
+export function fuelTypeLabel(fuelType: FuelType, locale: Locale): string {
+  const normalized = fuelType === "Elektrik" ? "Elektrikli" : fuelType;
+  const map: Record<Exclude<FuelType, "Elektrik">, { tr: string; en: string }> = {
+    Benzin: { tr: "Benzin", en: "Gasoline" },
+    Dizel: { tr: "Dizel", en: "Diesel" },
+    Hibrit: { tr: "Hibrit", en: "Hybrid" },
+    Elektrikli: { tr: "Elektrikli", en: "Electric" }
+  };
+  return map[normalized][locale];
+}
+
+export function transmissionLabel(transmission: TransmissionType, locale: Locale): string {
+  const map: Record<TransmissionType, { tr: string; en: string }> = {
+    Otomatik: { tr: "Otomatik", en: "Automatic" },
+    Manuel: { tr: "Manuel", en: "Manual" }
+  };
+  return map[transmission][locale];
 }

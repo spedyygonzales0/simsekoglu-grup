@@ -21,7 +21,6 @@ export function Header() {
       { href: "/construction", label: t(locale, "construction") },
       { href: "/architecture", label: t(locale, "architecture") },
       { href: "/fleet-rental", label: t(locale, "fleet") },
-      { href: "/projects", label: t(locale, "projects") },
       { href: "/contact", label: t(locale, "contact") }
     ],
     [locale]
@@ -50,8 +49,10 @@ export function Header() {
               )}
             </div>
             <div>
-              <p className="font-display text-xl font-semibold text-white">Şimşekoğlu Grup</p>
-              <p className="text-sm font-medium tracking-[0.04em] text-white/70">Corporate Group</p>
+              <p className="font-display text-[1.35rem] font-bold leading-tight text-white drop-shadow-[0_4px_10px_rgba(0,0,0,0.32)]">
+                Şimşekoğlu Grup
+              </p>
+              <p className="text-[0.96rem] font-semibold tracking-[0.04em] text-white/88">Corporate Group</p>
             </div>
           </Link>
 
@@ -62,8 +63,8 @@ export function Header() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`text-base font-semibold transition ${
-                    isActive ? "text-gold-400" : "text-white/85 hover:text-gold-300"
+                  className={`text-[1.02rem] font-semibold transition ${
+                    isActive ? "text-gold-300" : "text-white hover:text-gold-300"
                   }`}
                 >
                   {item.label}
@@ -75,7 +76,7 @@ export function Header() {
 
           <button
             type="button"
-            className="rounded-md border border-white/30 px-3 py-2 text-base text-white lg:hidden"
+            className="rounded-md border border-white/35 px-3 py-2 text-base font-semibold text-white lg:hidden"
             onClick={() => setIsOpen((prev) => !prev)}
           >
             Menu

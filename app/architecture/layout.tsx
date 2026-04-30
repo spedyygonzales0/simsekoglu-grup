@@ -1,15 +1,13 @@
-import { Metadata } from "next";
+﻿import { Metadata } from "next";
 import { buildPageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildPageMetadata({
-  title: "Mimarlık Hizmetleri | Şimşekoğlu Grup",
-  description:
-    "İç mimarlık, dış mimarlık, proje çizimi ve konsept tasarım alanlarında kurumsal mimarlık hizmetleri.",
+  title: "Mimarlık Projeleri | Şimşekoğlu Grup",
+  description: "Konut, fabrika ve villa kategorilerinde mimarlık projelerini inceleyin.",
   path: "/architecture",
-  keywords: ["mimarlık hizmetleri", "iç mimarlık", "dış mimarlık", "konsept tasarım"]
+  keywords: ["mimarlık hizmetleri", "konut projeleri", "villa projeleri", "fabrika projeleri"]
 });
 
 export default function ArchitectureLayout({ children }: { children: React.ReactNode }) {
   return children;
 }
-

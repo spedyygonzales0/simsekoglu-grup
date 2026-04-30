@@ -56,6 +56,13 @@ export interface Vehicle {
   secondaryCategories: VehicleCategory[];
   infoTr: string;
   infoEn: string;
+  insuranceBenefitsTr?: string;
+  insuranceBenefitsEn?: string;
+  whyChooseFleetTr?: string;
+  whyChooseFleetEn?: string;
+  servicesText?: string;
+  termsText?: string;
+  userRulesText?: string;
   officialUrl: string;
   mainImage: string;
   galleryImages: string[];
@@ -90,6 +97,42 @@ export interface Project {
   featured: boolean;
 }
 
+export interface ArchitectureCategory {
+  id: string;
+  titleTr: string;
+  titleEn: string;
+  slug: string;
+  descriptionTr: string;
+  descriptionEn: string;
+  coverImageUrl: string;
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface ArchitectureProject {
+  id: string;
+  categoryId: string;
+  titleTr: string;
+  titleEn: string;
+  slug: string;
+  shortDescriptionTr: string;
+  shortDescriptionEn: string;
+  detailedDescriptionTr: string;
+  detailedDescriptionEn: string;
+  subtitleTr: string;
+  subtitleEn: string;
+  coverImageUrl: string;
+  galleryImageUrls: string[];
+  locationTr: string;
+  locationEn: string;
+  statusTr: string;
+  statusEn: string;
+  year: string;
+  active: boolean;
+  featured: boolean;
+  sortOrder: number;
+}
+
 export interface SocialLinks {
   instagram: string;
 }
@@ -99,8 +142,14 @@ export interface ContactInfo {
   email: string;
   addressTr: string;
   addressEn: string;
+  whatsappGeneral: string;
+  whatsappFleet: string;
+  whatsappConstruction: string;
+  whatsappArchitecture: string;
+  // Legacy fallback field; kept for backward compatibility.
   whatsapp: string;
   mapEmbedUrl: string;
+  mapLinkUrl: string;
   social: SocialLinks;
 }
 
@@ -122,6 +171,7 @@ export interface AboutContent {
   titleEn: string;
   descriptionTr: string;
   descriptionEn: string;
+  videoUrl: string;
   valuesTitleTr: string;
   valuesTitleEn: string;
 }
@@ -164,6 +214,8 @@ export interface SettingsContent {
 
 export interface SiteContent {
   vehicles: Vehicle[];
+  fleetInformation: FleetInformationContent;
+  projectCardTexts: ProjectCardTextGroups;
   projects: Project[];
   contact: ContactInfo;
   home: HomeContent;
@@ -209,4 +261,44 @@ export interface TranslationMap {
     tr: string;
     en: string;
   };
+}
+
+export interface IncludedServiceItem {
+  id: string;
+  titleTr: string;
+  titleEn: string;
+  descriptionTr: string;
+  descriptionEn: string;
+  icon: string;
+}
+
+export interface FleetInformationContent {
+  servicesText: string;
+  termsText: string;
+  userRulesText: string;
+  insurancePrivilegesTitleTr?: string;
+  insurancePrivilegesTitleEn?: string;
+  insurancePrivilegesTextTr?: string;
+  insurancePrivilegesTextEn?: string;
+  whySimsekogluTitleTr?: string;
+  whySimsekogluTitleEn?: string;
+  whySimsekogluTextTr?: string;
+  whySimsekogluTextEn?: string;
+  legalNoteMain: string;
+  legalNoteSub: string;
+  includedServices: IncludedServiceItem[];
+}
+
+export interface ProjectCardTextContent {
+  titleTr: string;
+  titleEn: string;
+  summaryTr: string;
+  summaryEn: string;
+  locationTr: string;
+  locationEn: string;
+}
+
+export interface ProjectCardTextGroups {
+  construction: Record<string, ProjectCardTextContent>;
+  architecture: Record<string, ProjectCardTextContent>;
 }

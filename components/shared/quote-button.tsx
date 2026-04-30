@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useSiteData } from "@/components/providers/site-data-provider";
-import { buildQuoteMessage, buildWhatsAppUrl } from "@/lib/data/whatsapp";
+import { buildQuoteMessage, buildWhatsAppUrl, getWhatsappNumberByChannel } from "@/lib/data/whatsapp";
 import { FuelType, ServiceType, TransmissionType, Vehicle } from "@/lib/types";
 
 interface SelectedRentalOption {
@@ -60,16 +60,17 @@ export function QuoteButton({
         : undefined
     });
 
-    return buildWhatsAppUrl(content.contact.whatsapp, message);
-  }, [content.contact.whatsapp, locale, rentalStartDate, selectedLabel, serviceType, variant, vehicle]);
+    const targetNumber = getWhatsappNumberByChannel(content.contact, serviceType);
+    return buildWhatsAppUrl(targetNumber, message);
+  }, [content.contact, locale, rentalStartDate, selectedLabel, serviceType, variant, vehicle]);
 
   return (
     <div className="flex items-center gap-2">
       <a
         href={whatsappHref}
         target="_blank"
-        rel="noreferrer"
-        className={`premium-btn inline-flex items-center justify-center rounded-full bg-gold-500 px-6 py-3 text-base font-bold tracking-[0.02em] text-navy-900 hover:bg-gold-400 ${className}`}
+        rel="noopener noreferrer"
+        className={`premium-btn button-text inline-flex items-center justify-center rounded-full bg-gold-500 px-6 py-3 tracking-[0.02em] text-navy-900 hover:bg-gold-400 ${className}`}
       >
         {serviceType === "fleet"
           ? "OPSİYONLA"
@@ -93,7 +94,7 @@ export function QuoteButton({
                 : undefined
             })
           }
-          className="premium-btn inline-flex items-center justify-center rounded-full border border-navy-900/20 px-5 py-3 text-base font-semibold text-navy-900 hover:border-gold-500 hover:text-gold-500"
+          className="premium-btn button-text inline-flex items-center justify-center rounded-full border border-navy-900/20 px-5 py-3 text-navy-900 hover:border-gold-500 hover:text-gold-500"
         >
           {locale === "tr" ? "Form" : "Form"}
         </button>

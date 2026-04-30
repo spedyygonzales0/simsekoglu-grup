@@ -1,18 +1,33 @@
 ﻿"use client";
 
 import { defaultSiteContent } from "@/lib/data/default-site-content";
+import { defaultFleetInformation } from "@/lib/data/fleet-information-default";
+import { getFleetMediaBySlug } from "@/lib/data/fleet-vehicle-catalog";
 import { CATEGORY_DEFAULT_MEDIA, ensureFleetImage, getSafeProjectImage, getSafeProjectVideo, isFleetImage } from "@/lib/data/image-map";
 import {
+  createVehicle as createVehicleRecord,
+  deleteVehicle as deleteVehicleRecord,
+  getVehicles as getVehicleRecords,
+  updateVehicle as updateVehicleRecord
+} from "@/lib/services/vehicle-service";
+import {
+  getFleetInformation as getFleetInformationRecord,
+  updateFleetInformation as updateFleetInformationRecord
+} from "@/lib/services/fleet-information-service";
+import {
+  getSettings as getSettingsRecord,
+  updateSettings as updateSettingsRecord
+} from "@/lib/services/settings-service";
+import {
   clearLegacyUserStorage,
-  readAdminSession,
   readLocale,
   readQuoteRequests,
   readSiteContent,
-  writeAdminSession,
   writeLocale,
   writeQuoteRequests,
   writeSiteContent
 } from "@/lib/storage/client";
+import { STORAGE_KEYS } from "@/lib/storage/keys";
 import {
   AboutContent,
   AdminSession,
@@ -21,10 +36,12 @@ import {
   ConstructionContent,
   ContactInfo,
   FuelType,
+  FleetInformationContent,
   HomeContent,
   Locale,
   Project,
   ProjectStatus,
+  ProjectCardTextGroups,
   QuoteRequest,
   QuoteRequestStatus,
   RentalPackage,
@@ -79,11 +96,16 @@ interface SiteDataContextType {
   updateAbout: (about: AboutContent) => void;
   updateConstruction: (construction: ConstructionContent) => void;
   updateArchitecture: (architecture: ArchitectureContent) => void;
+  updateFleetInformation: (fleetInformation: FleetInformationContent) => void;
+  updateProjectCardTexts: (
+    section: keyof ProjectCardTextGroups,
+    nextValues: Record<string, ProjectCardTextGroups[keyof ProjectCardTextGroups][string]>
+  ) => void;
   updateSettings: (settings: SettingsContent) => void;
   updateMediaLibrary: (items: string[]) => void;
   adminSession: AdminSession | null;
   isAdminAuthenticated: boolean;
-  loginAdmin: (username: string, password: string) => boolean;
+  loginAdmin: (username: string, password: string) => Promise<{ ok: boolean; message?: string }>;
   logoutAdmin: () => void;
   quoteRequests: QuoteRequest[];
   createQuoteRequest: (payload: CreateQuotePayload) => { ok: boolean; message: string };
@@ -112,7 +134,6 @@ const VEHICLE_CATEGORIES: VehicleCategory[] = [
 
 const FUEL_TYPES: FuelType[] = ["Benzin", "Dizel", "Hibrit", "Elektrik", "Elektrikli"];
 const TRANSMISSION_TYPES: TransmissionType[] = ["Otomatik", "Manuel"];
-const AVAILABILITY_TYPES: VariantAvailabilityStatus[] = ["available", "limited", "unavailable"];
 const PROJECT_STATUS: ProjectStatus[] = ["completed", "ongoing", "planned"];
 const CAROUSEL_SPEEDS: CarouselSpeed[] = ["slow", "normal", "fast"];
 const MOCK_QUOTE_REQUESTS: QuoteRequest[] = [
@@ -153,6 +174,42 @@ const MOCK_QUOTE_REQUESTS: QuoteRequest[] = [
     createdAt: "2026-04-17T11:45:00.000Z"
   }
 ];
+
+const DEFAULT_CONTACT_MAP_EMBED_URL =
+  "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1291.7876590941064!2d32.610087211323965!3d40.066781855509205!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x14d3338ec7768c3f%3A0xa6b18625d699dbd8!2zxZ7EsE3FnkVLT8SeTFUgT1RPTU9UxLBWIEbEsExP!5e1!3m2!1str!2str!4v1777455274447!5m2!1str!2str";
+const DEFAULT_CONTACT_MAP_LINK_URL = "https://maps.app.goo.gl/TdHCzQVZe4N8qLrV9";
+
+function isEmbeddableGoogleMap(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.includes("google.") && parsed.pathname.includes("/maps/embed");
+  } catch {
+    return false;
+  }
+}
+
+function sanitizePlainText(value: unknown, maxLength = 4000): string {
+  const input = typeof value === "string" ? value : "";
+  const cleaned = input
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, maxLength);
+}
+
+function sanitizeMultilineText(value: unknown, maxLength = 12000): string {
+  const input = typeof value === "string" ? value : "";
+  const cleaned = input
+    .replace(/\r\n/g, "\n")
+    .replace(/\u0000/g, "")
+    .trim();
+  return cleaned.slice(0, maxLength);
+}
+
+function sanitizePhoneLike(value: unknown): string {
+  const input = typeof value === "string" ? value : "";
+  return input.replace(/[^\d+]/g, "").slice(0, 20);
+}
 
 type LegacyVehicle = Partial<Vehicle> & {
   brandModel?: string;
@@ -204,13 +261,6 @@ function asTransmission(value: string | undefined, fallback: TransmissionType): 
   return fallback;
 }
 
-function asAvailability(value: string | undefined): VariantAvailabilityStatus {
-  if (value && AVAILABILITY_TYPES.includes(value as VariantAvailabilityStatus)) {
-    return value as VariantAvailabilityStatus;
-  }
-  return "available";
-}
-
 function asProjectStatus(value: string | undefined): ProjectStatus {
   if (value && PROJECT_STATUS.includes(value as ProjectStatus)) return value as ProjectStatus;
   return "planned";
@@ -219,21 +269,6 @@ function asProjectStatus(value: string | undefined): ProjectStatus {
 function asCarouselSpeed(value: string | undefined): CarouselSpeed {
   if (value && CAROUSEL_SPEEDS.includes(value as CarouselSpeed)) return value as CarouselSpeed;
   return "normal";
-}
-
-function normalizeVariant(source: Partial<VehicleVariant>, index: number): VehicleVariant {
-  return {
-    variantId: source.variantId?.trim() || generateId(`vr${index + 1}`),
-    title: source.title?.trim() || `Varyant ${index + 1}`,
-    fuelType: asFuelType(source.fuelType, "Benzin"),
-    transmission: asTransmission(source.transmission, "Otomatik"),
-    modelYear: Number(source.modelYear) || 2024,
-    monthlyKm: Number(source.monthlyKm) || 3000,
-    monthlyPrice: Number(source.monthlyPrice) || 0,
-    deposit: Number(source.deposit) || 0,
-    availabilityStatus: asAvailability(source.availabilityStatus),
-    notes: source.notes?.trim() || ""
-  };
 }
 
 function createEmptyPriceMap(): RentalPackage["prices"] {
@@ -288,7 +323,7 @@ function variantsToRentalPackages(variants: Partial<VehicleVariant>[]): RentalPa
   return Array.from(grouped.values());
 }
 
-function normalizeVehicle(source: LegacyVehicle, index: number): Vehicle {
+function normalizeVehicle(source: LegacyVehicle): Vehicle {
   const legacyType = source.type;
   const brandModel = source.brandModel?.trim() || "Araç";
   const [legacyBrand, ...legacyModelParts] = brandModel.split(" ");
@@ -301,6 +336,13 @@ function normalizeVehicle(source: LegacyVehicle, index: number): Vehicle {
   const defaultVehicleInfo = defaultSiteContent.vehicles.find((item) => item.slug === slug);
   const infoTr = source.infoTr?.trim() || defaultVehicleInfo?.infoTr || "";
   const infoEn = source.infoEn?.trim() || defaultVehicleInfo?.infoEn || "";
+  const insuranceBenefitsTr = source.insuranceBenefitsTr?.trim() || defaultVehicleInfo?.insuranceBenefitsTr || "";
+  const insuranceBenefitsEn = source.insuranceBenefitsEn?.trim() || defaultVehicleInfo?.insuranceBenefitsEn || "";
+  const whyChooseFleetTr = source.whyChooseFleetTr?.trim() || defaultVehicleInfo?.whyChooseFleetTr || "";
+  const whyChooseFleetEn = source.whyChooseFleetEn?.trim() || defaultVehicleInfo?.whyChooseFleetEn || "";
+  const servicesText = source.servicesText?.trim() || defaultVehicleInfo?.servicesText || "";
+  const termsText = source.termsText?.trim() || defaultVehicleInfo?.termsText || "";
+  const userRulesText = source.userRulesText?.trim() || defaultVehicleInfo?.userRulesText || "";
   const officialUrl = source.officialUrl?.trim() || defaultVehicleInfo?.officialUrl || "";
 
   const primaryCategory = asVehicleCategory(source.primaryCategory ?? legacyType, "economy");
@@ -344,8 +386,24 @@ function normalizeVehicle(source: LegacyVehicle, index: number): Vehicle {
     .map((item, packageIndex) => normalizeRentalPackage(item, packageIndex))
     .filter((pkg) => pkg.id && pkg.fuelType && pkg.transmission);
 
-  const normalizedMainImage = ensureFleetImage(source.mainImage || source.imageUrl || "");
-  const normalizedGalleryImages = (Array.isArray(source.galleryImages) ? source.galleryImages : [])
+  const mappedMedia = getFleetMediaBySlug(slug);
+  const rawMainImage = source.mainImage || source.imageUrl || "";
+  const rawGalleryImages = Array.isArray(source.galleryImages) ? source.galleryImages : [];
+  const rawMediaCombined = [rawMainImage, ...rawGalleryImages].filter(Boolean);
+  const hasFolderBasedMedia = rawMediaCombined.some(
+    (path) => typeof path === "string" && path.includes("/aracresimleri/")
+  );
+  const shouldAutoUseFolderGallery = Boolean(mappedMedia) && !hasFolderBasedMedia;
+
+  const resolvedMainImage = shouldAutoUseFolderGallery
+    ? mappedMedia?.mainImage || rawMainImage
+    : rawMainImage;
+  const resolvedGalleryImages = shouldAutoUseFolderGallery
+    ? mappedMedia?.galleryImages || rawGalleryImages
+    : rawGalleryImages;
+
+  const normalizedMainImage = ensureFleetImage(resolvedMainImage);
+  const normalizedGalleryImages = resolvedGalleryImages
     .map((path: string) => ensureFleetImage(path))
     .filter(Boolean);
   const galleryWithMain = Array.from(new Set([normalizedMainImage, ...normalizedGalleryImages]));
@@ -360,6 +418,13 @@ function normalizeVehicle(source: LegacyVehicle, index: number): Vehicle {
     secondaryCategories,
     infoTr,
     infoEn,
+    insuranceBenefitsTr,
+    insuranceBenefitsEn,
+    whyChooseFleetTr,
+    whyChooseFleetEn,
+    servicesText,
+    termsText,
+    userRulesText,
     officialUrl,
     mainImage: normalizedMainImage,
     galleryImages: galleryWithMain,
@@ -420,8 +485,8 @@ function dedupeVehiclesByModel(vehicles: Vehicle[]): Vehicle[] {
   const mergedByKey = new Map<string, Vehicle>();
   const orderedKeys: string[] = [];
 
-  vehicles.forEach((vehicle, index) => {
-    const normalized = normalizeVehicle(vehicle, index);
+  vehicles.forEach((vehicle) => {
+    const normalized = normalizeVehicle(vehicle);
     const key = vehicleModelKey(normalized);
     const existing = mergedByKey.get(key);
 
@@ -463,6 +528,9 @@ function dedupeVehiclesByModel(vehicles: Vehicle[]): Vehicle[] {
       ...existing,
       infoTr: existing.infoTr || normalized.infoTr,
       infoEn: existing.infoEn || normalized.infoEn,
+      servicesText: existing.servicesText || normalized.servicesText || "",
+      termsText: existing.termsText || normalized.termsText || "",
+      userRulesText: existing.userRulesText || normalized.userRulesText || "",
       officialUrl: existing.officialUrl || normalized.officialUrl,
       secondaryCategories: mergedCategories.filter((category) => category !== existing.primaryCategory),
       mainImage: nextMainImage,
@@ -583,6 +651,23 @@ function normalizeSiteContent(source: SiteContent): SiteContent {
       ...defaultSiteContent.architecture,
       ...(source.architecture ?? {})
     },
+    fleetInformation: {
+      ...defaultFleetInformation,
+      ...(source.fleetInformation ?? {}),
+      includedServices: Array.isArray(source.fleetInformation?.includedServices)
+        ? source.fleetInformation.includedServices
+        : defaultFleetInformation.includedServices
+    },
+    projectCardTexts: {
+      construction: {
+        ...(defaultSiteContent.projectCardTexts?.construction ?? {}),
+        ...((source as Partial<SiteContent>).projectCardTexts?.construction ?? {})
+      },
+      architecture: {
+        ...(defaultSiteContent.projectCardTexts?.architecture ?? {}),
+        ...((source as Partial<SiteContent>).projectCardTexts?.architecture ?? {})
+      }
+    },
     contact: {
       ...defaultSiteContent.contact,
       ...(source.contact ?? {}),
@@ -605,10 +690,8 @@ function normalizeSiteContent(source: SiteContent): SiteContent {
       ? (source.vehicles as LegacyVehicle[])
       : defaultSiteContent.vehicles;
 
-  const normalizedSourceVehicles = vehiclesSource.map((vehicle, index) => normalizeVehicle(vehicle, index));
-  const normalizedDefaultVehicles = defaultSiteContent.vehicles.map((vehicle, index) =>
-    normalizeVehicle(vehicle, index)
-  );
+  const normalizedSourceVehicles = vehiclesSource.map((vehicle) => normalizeVehicle(vehicle));
+  const normalizedDefaultVehicles = defaultSiteContent.vehicles.map((vehicle) => normalizeVehicle(vehicle));
   const existingVehicleIds = new Set(normalizedSourceVehicles.map((vehicle) => vehicle.id));
   const existingVehicleSlugs = new Set(normalizedSourceVehicles.map((vehicle) => vehicle.slug));
 
@@ -624,6 +707,42 @@ function normalizeSiteContent(source: SiteContent): SiteContent {
       : defaultSiteContent.projects;
 
   merged.projects = projectsSource.map((project, index) => normalizeProject(project, index));
+
+  const legacyWhatsapp = "905550000000";
+  const sanitizeLegacyWhatsapp = (value: string | undefined): string => {
+    const trimmed = value?.trim() || "";
+    return trimmed === legacyWhatsapp ? "" : trimmed;
+  };
+
+  const fallbackGeneralWhatsapp =
+    merged.contact.whatsappGeneral?.trim() ||
+    merged.contact.whatsapp?.trim() ||
+    defaultSiteContent.contact.whatsappGeneral;
+  const isLegacyWhatsappValue = fallbackGeneralWhatsapp === legacyWhatsapp;
+  const normalizedGeneralWhatsapp = isLegacyWhatsappValue
+    ? defaultSiteContent.contact.whatsappGeneral
+    : fallbackGeneralWhatsapp;
+
+  merged.contact.whatsappGeneral = normalizedGeneralWhatsapp;
+  merged.contact.whatsapp = normalizedGeneralWhatsapp;
+  merged.contact.whatsappFleet = sanitizeLegacyWhatsapp(merged.contact.whatsappFleet) ||
+    defaultSiteContent.contact.whatsappFleet ||
+    normalizedGeneralWhatsapp;
+  merged.contact.whatsappConstruction = sanitizeLegacyWhatsapp(merged.contact.whatsappConstruction) ||
+    defaultSiteContent.contact.whatsappConstruction ||
+    normalizedGeneralWhatsapp;
+  merged.contact.whatsappArchitecture = sanitizeLegacyWhatsapp(merged.contact.whatsappArchitecture) || "";
+  const rawMapEmbed = merged.contact.mapEmbedUrl?.trim() || "";
+  const rawMapLink = merged.contact.mapLinkUrl?.trim() || "";
+  const isLegacyGenericMap =
+    rawMapEmbed === "https://maps.google.com" || rawMapLink === "https://maps.google.com";
+
+  merged.contact.mapEmbedUrl =
+    isLegacyGenericMap || !isEmbeddableGoogleMap(rawMapEmbed)
+      ? DEFAULT_CONTACT_MAP_EMBED_URL
+      : rawMapEmbed;
+  merged.contact.mapLinkUrl =
+    isLegacyGenericMap || !rawMapLink ? DEFAULT_CONTACT_MAP_LINK_URL : rawMapLink;
 
   return merged;
 }
@@ -659,17 +778,149 @@ export function SiteDataProvider({ children }: { children: React.ReactNode }) {
     clearLegacyUserStorage();
     const savedContent = normalizeSiteContent(readSiteContent());
     const savedLocale = readLocale();
-    const savedAdminSession = readAdminSession();
     const savedRequests = normalizeRequests(readQuoteRequests());
     const seededRequests =
       savedRequests.length || process.env.NODE_ENV === "production" ? savedRequests : MOCK_QUOTE_REQUESTS;
 
     setContent(savedContent);
     setLocaleState(savedLocale);
-    setAdminSession(savedAdminSession);
     setQuoteRequests(seededRequests);
     setIsHydrated(true);
+
+    void fetch("/api/admin/session", {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store"
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          setAdminSession(null);
+          return;
+        }
+        const data = (await response.json()) as { authenticated?: boolean; username?: string };
+        if (data.authenticated && data.username) {
+          setAdminSession({
+            role: "admin",
+            username: data.username,
+            loginAt: new Date().toISOString()
+          });
+        } else {
+          setAdminSession(null);
+        }
+      })
+      .catch(() => {
+        setAdminSession(null);
+      });
   }, []);
+
+  useEffect(() => {
+    if (!isHydrated || typeof window === "undefined") return;
+
+    const syncFromStorage = () => {
+      const storedContent = normalizeSiteContent(readSiteContent());
+      const storedLocale = readLocale();
+      const storedRequests = normalizeRequests(readQuoteRequests());
+
+      setContent(storedContent);
+      setLocaleState(storedLocale);
+      setQuoteRequests(storedRequests);
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key) return;
+      if (
+        event.key === STORAGE_KEYS.siteContent ||
+        event.key === STORAGE_KEYS.locale ||
+        event.key === STORAGE_KEYS.quoteRequests
+      ) {
+        syncFromStorage();
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        syncFromStorage();
+        void fetch("/api/admin/session", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store"
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              setAdminSession(null);
+              return;
+            }
+            const data = (await response.json()) as { authenticated?: boolean; username?: string };
+            if (data.authenticated && data.username) {
+              setAdminSession({
+                role: "admin",
+                username: data.username,
+                loginAt: new Date().toISOString()
+              });
+            } else {
+              setAdminSession(null);
+            }
+          })
+          .catch(() => setAdminSession(null));
+      }
+    };
+
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", onVisibility);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onVisibility);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    let cancelled = false;
+
+    const syncVehiclesFromService = async () => {
+      try {
+        const remoteVehicles = await getVehicleRecords();
+        if (cancelled) return;
+        if (!Array.isArray(remoteVehicles) || !remoteVehicles.length) return;
+        const normalizedVehicles = dedupeVehiclesByModel(
+          remoteVehicles.map((vehicle) => normalizeVehicle(vehicle))
+        );
+        setContent((prev) => ({ ...prev, vehicles: normalizedVehicles }));
+      } catch {
+        // Fallback already handled in service
+      }
+    };
+
+    const syncFleetInformationFromService = async () => {
+      try {
+        const remoteFleetInformation = await getFleetInformationRecord();
+        if (cancelled) return;
+        setContent((prev) => ({ ...prev, fleetInformation: remoteFleetInformation }));
+      } catch {
+        // Fallback already handled in service
+      }
+    };
+
+    const syncSettingsFromService = async () => {
+      try {
+        const remoteSettings = await getSettingsRecord();
+        if (cancelled) return;
+        setContent((prev) => ({ ...prev, settings: remoteSettings }));
+      } catch {
+        // Fallback already handled in service
+      }
+    };
+
+    void syncVehiclesFromService();
+    void syncFleetInformationFromService();
+    void syncSettingsFromService();
+    return () => {
+      cancelled = true;
+    };
+  }, [isHydrated]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -683,11 +934,6 @@ export function SiteDataProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isHydrated) return;
-    writeAdminSession(adminSession);
-  }, [adminSession, isHydrated]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
     writeQuoteRequests(quoteRequests);
   }, [isHydrated, quoteRequests]);
 
@@ -696,32 +942,61 @@ export function SiteDataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addVehicle = (vehicle: Omit<Vehicle, "id">) => {
-    setContent((prev) => {
-      const nextVehicle = normalizeVehicle(
-        {
-          ...vehicle,
-          id: generateId("v")
-        },
-        0
-      );
-      return {
-        ...prev,
-        vehicles: dedupeVehiclesByModel([nextVehicle, ...prev.vehicles])
-      };
+    const tempVehicle = normalizeVehicle({
+      ...vehicle,
+      id: generateId("v")
     });
+
+    setContent((prev) => ({
+      ...prev,
+      vehicles: dedupeVehiclesByModel([tempVehicle, ...prev.vehicles])
+    }));
+
+    void createVehicleRecord(tempVehicle)
+      .then((savedVehicle) => {
+        const normalizedSaved = normalizeVehicle(savedVehicle);
+        setContent((prev) => ({
+          ...prev,
+          vehicles: dedupeVehiclesByModel(
+            prev.vehicles.map((item) => (item.id === tempVehicle.id ? normalizedSaved : item))
+          )
+        }));
+      })
+      .catch(() => {
+        // fallback storage already handled in service
+      });
   };
 
   const updateVehicle = (id: string, updated: Partial<Vehicle>) => {
+    let optimisticVehicle: Vehicle | null = null;
+
     setContent((prev) => {
-      const updatedVehicles = prev.vehicles.map((vehicle, index) => {
+      const updatedVehicles = prev.vehicles.map((vehicle) => {
         if (vehicle.id !== id) return vehicle;
-        return normalizeVehicle({ ...vehicle, ...updated, id }, index);
+        optimisticVehicle = normalizeVehicle({ ...vehicle, ...updated, id });
+        return optimisticVehicle;
       });
       return {
         ...prev,
         vehicles: dedupeVehiclesByModel(updatedVehicles)
       };
     });
+
+    if (!optimisticVehicle) return;
+    void updateVehicleRecord(id, optimisticVehicle)
+      .then((savedVehicle) => {
+        if (!savedVehicle) return;
+        const normalizedSaved = normalizeVehicle(savedVehicle);
+        setContent((prev) => ({
+          ...prev,
+          vehicles: dedupeVehiclesByModel(
+            prev.vehicles.map((item) => (item.id === id ? normalizedSaved : item))
+          )
+        }));
+      })
+      .catch(() => {
+        // fallback storage already handled in service
+      });
   };
 
   const deleteVehicle = (id: string) => {
@@ -729,6 +1004,9 @@ export function SiteDataProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       vehicles: prev.vehicles.filter((vehicle) => vehicle.id !== id)
     }));
+    void deleteVehicleRecord(id).catch(() => {
+      // fallback storage already handled in service
+    });
   };
 
   const addProject = (project: Omit<Project, "id">) => {
@@ -758,51 +1036,211 @@ export function SiteDataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateContact = (contact: ContactInfo) => {
-    setContent((prev) => ({ ...prev, contact }));
+    const normalizedWhatsappGeneral =
+      sanitizePhoneLike(contact.whatsappGeneral || contact.whatsapp) ||
+      defaultSiteContent.contact.whatsappGeneral;
+    const normalizedWhatsappFleet =
+      sanitizePhoneLike(contact.whatsappFleet) || defaultSiteContent.contact.whatsappFleet;
+    const normalizedWhatsappConstruction =
+      sanitizePhoneLike(contact.whatsappConstruction) || defaultSiteContent.contact.whatsappConstruction;
+    const normalizedWhatsappArchitecture = sanitizePhoneLike(contact.whatsappArchitecture);
+    const normalizedEmbed = sanitizePlainText(contact.mapEmbedUrl, 2000);
+    const normalizedMapLink = sanitizePlainText(contact.mapLinkUrl, 1000);
+
+    setContent((prev) => ({
+      ...prev,
+      contact: {
+        ...contact,
+        phone: sanitizePlainText(contact.phone, 40),
+        email: sanitizePlainText(contact.email, 120),
+        addressTr: sanitizeMultilineText(contact.addressTr, 1000),
+        addressEn: sanitizeMultilineText(contact.addressEn, 1000),
+        whatsappGeneral: normalizedWhatsappGeneral,
+        whatsapp: normalizedWhatsappGeneral,
+        whatsappFleet: normalizedWhatsappFleet,
+        whatsappConstruction: normalizedWhatsappConstruction,
+        whatsappArchitecture: normalizedWhatsappArchitecture,
+        mapEmbedUrl: isEmbeddableGoogleMap(normalizedEmbed)
+          ? normalizedEmbed
+          : DEFAULT_CONTACT_MAP_EMBED_URL,
+        mapLinkUrl: normalizedMapLink || DEFAULT_CONTACT_MAP_LINK_URL,
+        social: {
+          instagram: sanitizePlainText(contact.social?.instagram, 120)
+        }
+      }
+    }));
   };
 
   const updateHome = (home: HomeContent) => {
-    setContent((prev) => ({ ...prev, home }));
+    setContent((prev) => ({
+      ...prev,
+      home: {
+        headlineTr: sanitizePlainText(home.headlineTr, 220),
+        headlineEn: sanitizePlainText(home.headlineEn, 220),
+        subHeadlineTr: sanitizeMultilineText(home.subHeadlineTr, 1000),
+        subHeadlineEn: sanitizeMultilineText(home.subHeadlineEn, 1000),
+        ctaTr: sanitizePlainText(home.ctaTr, 80),
+        ctaEn: sanitizePlainText(home.ctaEn, 80),
+        serviceTitleTr: sanitizePlainText(home.serviceTitleTr, 180),
+        serviceTitleEn: sanitizePlainText(home.serviceTitleEn, 180),
+        serviceDescriptionTr: sanitizeMultilineText(home.serviceDescriptionTr, 1200),
+        serviceDescriptionEn: sanitizeMultilineText(home.serviceDescriptionEn, 1200)
+      }
+    }));
   };
 
   const updateAbout = (about: AboutContent) => {
-    setContent((prev) => ({ ...prev, about }));
+    setContent((prev) => ({
+      ...prev,
+      about: {
+        titleTr: sanitizePlainText(about.titleTr, 220),
+        titleEn: sanitizePlainText(about.titleEn, 220),
+        descriptionTr: sanitizeMultilineText(about.descriptionTr, 20000),
+        descriptionEn: sanitizeMultilineText(about.descriptionEn, 20000),
+        videoUrl: sanitizePlainText(about.videoUrl, 500),
+        valuesTitleTr: sanitizePlainText(about.valuesTitleTr, 120),
+        valuesTitleEn: sanitizePlainText(about.valuesTitleEn, 120)
+      }
+    }));
   };
 
   const updateConstruction = (construction: ConstructionContent) => {
-    setContent((prev) => ({ ...prev, construction }));
+    setContent((prev) => ({
+      ...prev,
+      construction: {
+        titleTr: sanitizePlainText(construction.titleTr, 220),
+        titleEn: sanitizePlainText(construction.titleEn, 220),
+        descriptionTr: sanitizeMultilineText(construction.descriptionTr, 2000),
+        descriptionEn: sanitizeMultilineText(construction.descriptionEn, 2000),
+        residentialTr: sanitizeMultilineText(construction.residentialTr, 1200),
+        residentialEn: sanitizeMultilineText(construction.residentialEn, 1200),
+        commercialTr: sanitizeMultilineText(construction.commercialTr, 1200),
+        commercialEn: sanitizeMultilineText(construction.commercialEn, 1200),
+        renovationTr: sanitizeMultilineText(construction.renovationTr, 1200),
+        renovationEn: sanitizeMultilineText(construction.renovationEn, 1200),
+        turnkeyTr: sanitizeMultilineText(construction.turnkeyTr, 1200),
+        turnkeyEn: sanitizeMultilineText(construction.turnkeyEn, 1200)
+      }
+    }));
   };
 
   const updateArchitecture = (architecture: ArchitectureContent) => {
-    setContent((prev) => ({ ...prev, architecture }));
+    setContent((prev) => ({
+      ...prev,
+      architecture: {
+        titleTr: sanitizePlainText(architecture.titleTr, 220),
+        titleEn: sanitizePlainText(architecture.titleEn, 220),
+        descriptionTr: sanitizeMultilineText(architecture.descriptionTr, 2000),
+        descriptionEn: sanitizeMultilineText(architecture.descriptionEn, 2000),
+        interiorTr: sanitizeMultilineText(architecture.interiorTr, 1200),
+        interiorEn: sanitizeMultilineText(architecture.interiorEn, 1200),
+        exteriorTr: sanitizeMultilineText(architecture.exteriorTr, 1200),
+        exteriorEn: sanitizeMultilineText(architecture.exteriorEn, 1200),
+        drawingTr: sanitizeMultilineText(architecture.drawingTr, 1200),
+        drawingEn: sanitizeMultilineText(architecture.drawingEn, 1200),
+        conceptTr: sanitizeMultilineText(architecture.conceptTr, 1200),
+        conceptEn: sanitizeMultilineText(architecture.conceptEn, 1200)
+      }
+    }));
+  };
+
+  const updateFleetInformation = (fleetInformation: FleetInformationContent) => {
+    setContent((prev) => ({ ...prev, fleetInformation }));
+    void updateFleetInformationRecord(fleetInformation)
+      .then((savedFleetInformation) => {
+        setContent((prev) => ({ ...prev, fleetInformation: savedFleetInformation }));
+      })
+      .catch(() => {
+        // fallback storage already handled in service
+      });
+  };
+
+  const updateProjectCardTexts = (
+    section: keyof ProjectCardTextGroups,
+    nextValues: Record<string, ProjectCardTextGroups[keyof ProjectCardTextGroups][string]>
+  ) => {
+    setContent((prev) => ({
+      ...prev,
+      projectCardTexts: {
+        ...prev.projectCardTexts,
+        [section]: nextValues
+      }
+    }));
   };
 
   const updateSettings = (settings: SettingsContent) => {
     setContent((prev) => ({ ...prev, settings }));
+    void updateSettingsRecord(settings)
+      .then((savedSettings) => {
+        setContent((prev) => ({ ...prev, settings: savedSettings }));
+      })
+      .catch(() => {
+        // fallback storage already handled in service
+      });
   };
 
   const updateMediaLibrary = (items: string[]) => {
-    const sanitized = items.map((item) => item.trim()).filter(Boolean);
+    const sanitized = items.map((item) => sanitizePlainText(item, 500)).filter(Boolean);
     setContent((prev) => ({ ...prev, mediaLibrary: sanitized }));
   };
 
-  const loginAdmin = (username: string, password: string): boolean => {
-    const isSuccess = username === "admin" && password === "admin123";
-    if (!isSuccess) return false;
-    setAdminSession({
-      role: "admin",
-      username: "admin",
-      loginAt: new Date().toISOString()
-    });
-    return true;
+  const loginAdmin = async (
+    username: string,
+    password: string
+  ): Promise<{ ok: boolean; message?: string }> => {
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          username: username.trim(),
+          password
+        })
+      });
+
+      const data = (await response.json()) as {
+        ok?: boolean;
+        message?: string;
+        username?: string;
+      };
+
+      if (!response.ok || !data.ok) {
+        return {
+          ok: false,
+          message: data.message || "Kullanıcı adı veya şifre hatalı."
+        };
+      }
+
+      setAdminSession({
+        role: "admin",
+        username: data.username || username.trim() || "admin",
+        loginAt: new Date().toISOString()
+      });
+
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "Giriş işlemi sırasında bir hata oluştu." };
+    }
   };
 
   const logoutAdmin = () => {
+    void fetch("/api/admin/logout", {
+      method: "POST",
+      credentials: "include"
+    });
     setAdminSession(null);
   };
 
   const createQuoteRequest = (payload: CreateQuotePayload) => {
-    if (!payload.name.trim() || !payload.phone.trim() || !payload.email.trim()) {
+    const name = sanitizePlainText(payload.name, 120);
+    const phone = sanitizePhoneLike(payload.phone);
+    const email = sanitizePlainText(payload.email, 160);
+    const message = sanitizeMultilineText(payload.message, 4000);
+
+    if (!name || !phone || !email) {
       return {
         ok: false,
         message:
@@ -814,17 +1252,17 @@ export function SiteDataProvider({ children }: { children: React.ReactNode }) {
 
     const next: QuoteRequest = {
       id: generateId("q"),
-      name: payload.name.trim(),
-      phone: payload.phone.trim(),
-      email: payload.email.trim(),
+      name,
+      phone,
+      email,
       serviceType: payload.serviceType,
-      selectedVehicleSlug: payload.selectedVehicleSlug,
-      selectedVehicleLabel: payload.selectedVehicleLabel,
-      selectedVariantId: payload.selectedVariantId,
-      selectedVariantLabel: payload.selectedVariantLabel,
-      selectedProjectId: payload.selectedProjectId,
-      selectedProjectLabel: payload.selectedProjectLabel,
-      message: payload.message.trim(),
+      selectedVehicleSlug: sanitizePlainText(payload.selectedVehicleSlug, 120),
+      selectedVehicleLabel: sanitizePlainText(payload.selectedVehicleLabel, 200),
+      selectedVariantId: sanitizePlainText(payload.selectedVariantId, 120),
+      selectedVariantLabel: sanitizePlainText(payload.selectedVariantLabel, 200),
+      selectedProjectId: sanitizePlainText(payload.selectedProjectId, 120),
+      selectedProjectLabel: sanitizePlainText(payload.selectedProjectLabel, 200),
+      message,
       status: "pending",
       createdAt: new Date().toISOString()
     };
@@ -878,6 +1316,8 @@ export function SiteDataProvider({ children }: { children: React.ReactNode }) {
     updateAbout,
     updateConstruction,
     updateArchitecture,
+    updateFleetInformation,
+    updateProjectCardTexts,
     updateSettings,
     updateMediaLibrary,
     adminSession,

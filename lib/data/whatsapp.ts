@@ -1,5 +1,5 @@
-﻿import { currencyTl, serviceTypeLabel } from "@/lib/i18n";
-import { Locale, VehicleCategory } from "@/lib/types";
+﻿import { currencyTl, fuelTypeLabel, serviceTypeLabel, transmissionLabel } from "@/lib/i18n";
+import { ContactInfo, FuelType, Locale, ServiceType, TransmissionType, VehicleCategory } from "@/lib/types";
 
 interface VehicleContext {
   brand: string;
@@ -11,8 +11,8 @@ interface VehicleContext {
 
 interface VariantContext {
   title?: string;
-  fuelType: string;
-  transmission: string;
+  fuelType: FuelType;
+  transmission: TransmissionType;
   monthlyKm: number;
   monthlyPrice: number;
 }
@@ -26,6 +26,8 @@ interface QuoteMessageParams {
   variant?: VariantContext;
 }
 
+export type WhatsappChannel = ServiceType | "general";
+
 export function sanitizeWhatsappNumber(input: string): string {
   const digits = input.replace(/\D/g, "");
   if (digits.startsWith("90")) return digits;
@@ -36,6 +38,16 @@ export function sanitizeWhatsappNumber(input: string): string {
 export function buildWhatsAppUrl(number: string, message: string): string {
   const safeNumber = sanitizeWhatsappNumber(number);
   return `https://wa.me/${safeNumber}?text=${encodeURIComponent(message)}`;
+}
+
+export function getWhatsappNumberByChannel(contact: ContactInfo, channel: WhatsappChannel): string {
+  const general =
+    contact.whatsappGeneral?.trim() || contact.whatsapp?.trim() || contact.whatsappFleet?.trim() || "";
+
+  if (channel === "fleet") return contact.whatsappFleet?.trim() || general;
+  if (channel === "construction") return contact.whatsappConstruction?.trim() || general;
+  if (channel === "architecture") return contact.whatsappArchitecture?.trim() || general;
+  return general;
 }
 
 export function buildQuoteMessage(params: QuoteMessageParams): string {
@@ -51,8 +63,8 @@ export function buildQuoteMessage(params: QuoteMessageParams): string {
         "",
         `Vehicle: ${vehicle.brand} ${vehicle.model}`,
         `Model Year: ${vehicle.modelYearLabel || "2024+"}`,
-        `Fuel: ${variant.fuelType}`,
-        `Transmission: ${variant.transmission}`,
+        `Fuel: ${fuelTypeLabel(variant.fuelType, "en")}`,
+        `Transmission: ${transmissionLabel(variant.transmission, "en")}`,
         `Monthly KM: ${variant.monthlyKm}`,
         `Monthly Price: ${currencyTl(variant.monthlyPrice, locale)}`,
         "+ VAT / MONTH",
@@ -78,6 +90,54 @@ export function buildQuoteMessage(params: QuoteMessageParams): string {
       "",
       "Ad Soyad:",
       "Telefon:",
+      "Not:"
+    ].join("\n");
+  }
+
+  if (serviceType === "construction") {
+    if (locale === "en") {
+      return [
+        "Hello, I would like to get a quote for construction services from Simsekoglu Group website.",
+        "",
+        "Service: Construction",
+        "Project Type:",
+        "Location:",
+        "Estimated m²:",
+        "Note:"
+      ].join("\n");
+    }
+
+    return [
+      "Merhaba, Şimşekoğlu Grup web sitesinden inşaat hizmetleri için teklif almak istiyorum.",
+      "",
+      "Hizmet: İnşaat",
+      "Proje Türü:",
+      "Konum:",
+      "Tahmini m²:",
+      "Not:"
+    ].join("\n");
+  }
+
+  if (serviceType === "architecture") {
+    if (locale === "en") {
+      return [
+        "Hello, I would like to get a quote for architecture services from Simsekoglu Group website.",
+        "",
+        "Service: Architecture",
+        "Request: Interior architecture / Exterior architecture / Project drawing",
+        "Location:",
+        "Estimated m²:",
+        "Note:"
+      ].join("\n");
+    }
+
+    return [
+      "Merhaba, Şimşekoğlu Grup web sitesinden mimarlık hizmetleri için teklif almak istiyorum.",
+      "",
+      "Hizmet: Mimarlık",
+      "Talep: İç mimarlık / Dış mimarlık / Proje çizimi",
+      "Konum:",
+      "Tahmini m²:",
       "Not:"
     ].join("\n");
   }
@@ -119,3 +179,5 @@ export function buildZeroKmQuoteMessage(): string {
     "Not:"
   ].join("\n");
 }
+
+

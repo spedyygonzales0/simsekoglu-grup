@@ -1,4 +1,5 @@
 ﻿import { defaultFleetVehicles } from "@/lib/data/fleet-vehicle-catalog";
+import { defaultFleetInformation } from "@/lib/data/fleet-information-default";
 import { CATEGORY_DEFAULT_MEDIA, IMAGE_FOLDERS } from "@/lib/data/image-map";
 import { SiteContent } from "@/lib/types";
 
@@ -22,10 +23,29 @@ export const defaultSiteContent: SiteContent = {
   about: {
     titleTr: "Şimşekoğlu Grup: Güven ve Operasyonel Mükemmeliyet",
     titleEn: "Simsekoglu Group: Trust and Operational Excellence",
-    descriptionTr:
-      "Şimşekoğlu Grup, büyük ölçekli projelerde planlama, uygulama ve saha yönetimini bütüncül bir yaklaşımla yürütür.",
-    descriptionEn:
-      "Simsekoglu Group executes planning, implementation, and field operations with a holistic approach in large-scale projects.",
+    descriptionTr: `Şimşekoğlu Grup, temellerini uzun yıllara dayanan tecrübe, güven ve kalite anlayışı üzerine inşa etmiş köklü bir kuruluştur. İnşaat sektöründe edindiği güçlü birikimle faaliyetlerine başlayan firmamız, bugüne kadar birçok projede sağlamlığı, sürdürülebilirliği ve estetik yaklaşımı bir araya getirerek sektörde güvenilir bir marka haline gelmiştir.
+
+Zaman içerisinde gelişen ihtiyaçlar ve değişen sektör dinamikleri doğrultusunda kendini sürekli yenileyen Şimşekoğlu Grup, faaliyet alanını genişleterek mimarlık ve proje geliştirme hizmetleri ile müşterilerine uçtan uca çözümler sunmaya başlamıştır. Modern tasarım anlayışı, fonksiyonel çözümler ve mühendislik disiplinini bir araya getiren yaklaşımımız sayesinde, her projede kaliteyi ve müşteri memnuniyetini ön planda tutmaktayız.
+
+Bugün ise Şimşekoğlu Grup, sahip olduğu kurumsal vizyon doğrultusunda hizmet yelpazesini daha da genişleterek kurumsal araç kiralama ve filo yönetimi alanında da faaliyet göstermektedir. İş dünyasının ihtiyaçlarına özel olarak geliştirdiğimiz çözümlerle, müşterilerimize güvenilir, ekonomik ve sürdürülebilir ulaşım hizmetleri sunuyoruz.
+
+Faaliyet gösterdiğimiz her alanda ortak hedefimiz; güvenilirlik, şeffaflık, kalite ve sürdürülebilir değer üretimidir.
+
+Şimşekoğlu Grup olarak, iş ortaklarımızla uzun vadeli ilişkiler kurmayı, müşterilerimizin ihtiyaçlarını doğru analiz ederek en uygun çözümleri sunmayı ve her zaman sözümüzün arkasında durmayı ilke edindik.
+
+Geçmişten aldığımız güç, bugün sunduğumuz hizmet kalitesi ve geleceğe yönelik vizyonumuz ile; Şimşekoğlu Grup, her projede güvenin ve profesyonelliğin temsilcisidir.`,
+    descriptionEn: `Şimşekoğlu Group is a well-established organization built on years of experience, trust, and a strong commitment to quality. Having started its journey in the construction sector, our company has successfully delivered numerous projects by combining durability, sustainability, and aesthetic excellence, earning a reputation as a reliable and respected brand.
+
+In line with evolving industry dynamics and changing customer needs, Şimşekoğlu Group has continuously developed its capabilities and expanded its scope of services. By incorporating architectural design and project development services, we now provide end-to-end solutions that integrate modern design principles, functional efficiency, and engineering excellence. In every project we undertake, we prioritize quality and customer satisfaction.
+
+Today, guided by our corporate vision, Şimşekoğlu Group has further diversified its operations by offering corporate vehicle rental and fleet management services. With tailored solutions designed to meet the needs of businesses, we provide reliable, cost-effective, and sustainable mobility services.
+
+Across all our areas of operation, our core principles remain unchanged: reliability, transparency, quality, and sustainable value creation.
+
+At Şimşekoğlu Group, we are committed to building long-term partnerships, accurately understanding our clients’ needs, and delivering the most effective solutions while always standing behind our promises.
+
+With the strength we draw from our past, the quality of services we deliver today, and our forward-looking vision, Şimşekoğlu Group stands as a symbol of trust and professionalism in every project.`,
+    videoUrl: "/images/hakkımızda/TANITIM.mp4",
     valuesTitleTr: "Temel Değerlerimiz",
     valuesTitleEn: "Our Core Values"
   },
@@ -66,13 +86,24 @@ export const defaultSiteContent: SiteContent = {
     email: "info@simsekoglugrup.com",
     addressTr: "Levent Mah. Büyükdere Cad. No:00, Beşiktaş / İstanbul",
     addressEn: "Levent District, Buyukdere Ave. No:00, Besiktas / Istanbul",
-    whatsapp: "905550000000",
-    mapEmbedUrl: "https://maps.google.com",
+    whatsappGeneral: "905446564000",
+    whatsappFleet: "905333603627",
+    whatsappConstruction: "905446564000",
+    whatsappArchitecture: "",
+    whatsapp: "905446564000",
+    mapEmbedUrl:
+      "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1291.7876590941064!2d32.610087211323965!3d40.066781855509205!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x14d3338ec7768c3f%3A0xa6b18625d699dbd8!2zxZ7EsE3FnkVLT8SeTFUgT1RPTU9UxLBWIEbEsExP!5e1!3m2!1str!2str!4v1777455274447!5m2!1str!2str",
+    mapLinkUrl: "https://maps.app.goo.gl/TdHCzQVZe4N8qLrV9",
     social: {
       instagram: "@simsekoglufilo"
     }
   },
   vehicles: defaultFleetVehicles,
+  fleetInformation: defaultFleetInformation,
+  projectCardTexts: {
+    construction: {},
+    architecture: {}
+  },
   projects: [
     {
       id: "p-construction-1",
@@ -140,3 +171,5 @@ export const defaultSiteContent: SiteContent = {
     currency: "TRY"
   }
 };
+
+

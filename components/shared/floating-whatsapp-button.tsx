@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useMemo } from "react";
 import { useSiteData } from "@/components/providers/site-data-provider";
-import { buildWhatsAppUrl } from "@/lib/data/whatsapp";
+import { buildWhatsAppUrl, getWhatsappNumberByChannel } from "@/lib/data/whatsapp";
 
 export function FloatingWhatsAppButton() {
   const { locale, content } = useSiteData();
@@ -12,14 +12,15 @@ export function FloatingWhatsAppButton() {
       locale === "tr"
         ? "Merhaba, Şimşekoğlu Grup web sitesinden bilgi almak istiyorum."
         : "Hello, I would like to get information from Simsekoglu Group website.";
-    return buildWhatsAppUrl(content.contact.whatsapp, message);
-  }, [content.contact.whatsapp, locale]);
+    const targetNumber = getWhatsappNumberByChannel(content.contact, "general");
+    return buildWhatsAppUrl(targetNumber, message);
+  }, [content.contact, locale]);
 
   return (
     <a
       href={href}
       target="_blank"
-      rel="noreferrer"
+      rel="noopener noreferrer"
       aria-label={locale === "tr" ? "WhatsApp ile iletişime geç" : "Contact on WhatsApp"}
       className="fixed z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_10px_24px_-12px_rgba(7,20,39,0.65)] transition-transform duration-200 hover:scale-105 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 sm:h-12 sm:w-12"
       style={{
@@ -47,4 +48,3 @@ export function FloatingWhatsAppButton() {
     </a>
   );
 }
-

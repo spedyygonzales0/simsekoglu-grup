@@ -1,6 +1,6 @@
 ﻿import { defaultSiteContent } from "@/lib/data/default-site-content";
 import { STORAGE_KEYS } from "@/lib/storage/keys";
-import { AdminSession, Locale, QuoteRequest, SiteContent } from "@/lib/types";
+import { Locale, QuoteRequest, SiteContent } from "@/lib/types";
 
 function safeParse<T>(value: string | null): T | null {
   if (!value) return null;
@@ -54,35 +54,6 @@ export function readLocale(): Locale {
 export function writeLocale(locale: Locale): void {
   if (!canUseStorage()) return;
   localStorage.setItem(STORAGE_KEYS.locale, locale);
-}
-
-export function readAdminSession(): AdminSession | null {
-  if (!canUseStorage()) return null;
-
-  const current = safeParse<AdminSession>(localStorage.getItem(STORAGE_KEYS.adminSession));
-  if (current?.role === "admin") return current;
-
-  const legacy = safeParse<{ role?: string; username?: string }>(
-    localStorage.getItem("simsekoglu_auth_session_v2")
-  );
-  if (legacy?.role === "admin" && legacy.username) {
-    return {
-      role: "admin",
-      username: legacy.username,
-      loginAt: new Date().toISOString()
-    };
-  }
-
-  return null;
-}
-
-export function writeAdminSession(session: AdminSession | null): void {
-  if (!canUseStorage()) return;
-  if (!session) {
-    localStorage.removeItem(STORAGE_KEYS.adminSession);
-    return;
-  }
-  writeStorage(STORAGE_KEYS.adminSession, session);
 }
 
 export function readQuoteRequests(): QuoteRequest[] {
